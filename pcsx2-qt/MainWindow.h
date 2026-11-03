@@ -155,7 +155,7 @@ private Q_SLOTS:
 
 	std::optional<WindowInfo> acquireRenderWindow(bool recreate_window, bool fullscreen, bool render_to_main, bool surfaceless);
 	void recenterWindow();
-	void displayResizeRequested(qint32 width, qint32 height, bool force_center);
+	void displayResizeRequested(qint32 width, qint32 height, bool force_center, bool game_list = false);
 	void mouseModeRequested(bool relative_mode, bool hide_cursor);
 	void mouseLockRequested(bool state);
 	void releaseRenderWindow();

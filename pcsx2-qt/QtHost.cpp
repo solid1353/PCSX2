@@ -852,24 +852,24 @@ void EmuThread::requestDisplaySize(float scale)
 	VMManager::RequestDisplaySize(scale);
 }
 
-void EmuThread::requestCenteredDisplaySize()
+void EmuThread::requestCenteredDisplaySize(bool game_list)
 {
 	if (!isOnEmuThread())
 	{
-		QMetaObject::invokeMethod(this, &EmuThread::requestCenteredDisplaySize, Qt::QueuedConnection);
+		QMetaObject::invokeMethod(this, [this, game_list]() { requestCenteredDisplaySize(game_list); }, Qt::QueuedConnection);
 		return;
 	}
 
-	if (!VMManager::HasValidVM())
+	if (!game_list && !VMManager::HasValidVM())
 		return;
 
-	const float present_aspect_ratio = GSGetPresentAspectRatio();
+	const float present_aspect_ratio = VMManager::HasValidVM() ? GSGetPresentAspectRatio() : 4.0f / 3.0f;
 	if (present_aspect_ratio <= 0.0f)
 		return;
 
 	onResizeRenderWindowRequested(
 		static_cast<s32>(std::lround(present_aspect_ratio * CENTERED_DISPLAY_ASPECT_RATIO_HEIGHT)),
-		CENTERED_DISPLAY_ASPECT_RATIO_HEIGHT, true);
+		CENTERED_DISPLAY_ASPECT_RATIO_HEIGHT, true, game_list);
 }
 
 void EmuThread::enumerateInputDevices()

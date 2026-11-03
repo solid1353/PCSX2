@@ -736,6 +736,10 @@ void MainWindow::setupStatusBarWidgets()
 	m_status_verbose_widget->setContentsMargins(10, 0, 10, 0);
 	m_status_verbose_widget->setFixedHeight(20);
 	m_status_verbose_widget->setMinimumWidth(20);
+	// Reserve the status row's game height even while all game fields are hidden.
+	m_ui.statusBar->addWidget(m_status_verbose_widget);
+	m_ui.statusBar->setMinimumHeight(m_ui.statusBar->sizeHint().height());
+	m_ui.statusBar->removeWidget(m_status_verbose_widget);
 	m_status_verbose_widget->hide();
 
 	m_status_renderer_widget = new StatusLabel(m_ui.statusBar);
@@ -3461,19 +3465,7 @@ void MainWindow::createDisplayWidget(bool fullscreen, bool render_to_main)
 
 void MainWindow::recenterWindow()
 {
-	if (s_vm_valid && !(isActiveWindow() && m_game_list_widget->isVisible()))
-	{
-		if (m_display_surface)
-			g_emu_thread->requestCenteredDisplaySize();
-	}
-	else
-	{
-		const QSize chrome_size = size() - m_game_list_widget->size();
-		const QSize content_size = getCenteredContentSize(4.0f / 3.0f, frameGeometry().size(), geometry().size(), chrome_size);
-		QtUtils::ResizePotentiallyFixedSizeWindow(this,
-			content_size.width() + chrome_size.width(), content_size.height() + chrome_size.height());
-		centerMainWindow();
-	}
+	g_emu_thread->requestCenteredDisplaySize(!s_vm_valid || (isActiveWindow() && m_game_list_widget->isVisible()));
 }
 
 void MainWindow::centerDisplayWindow()
@@ -3527,12 +3519,13 @@ void MainWindow::centerMainWindow()
 	}
 }
 
-void MainWindow::displayResizeRequested(qint32 width, qint32 height, bool force_center)
+void MainWindow::displayResizeRequested(qint32 width, qint32 height, bool force_center, bool game_list)
 {
-	if (!m_display_surface)
+	if (game_list ? !m_game_list_widget->isVisible() : !m_display_surface)
 		return;
 
 	const bool center_window = force_center || QtHost::ShouldCenterDisplayWindow();
+	layout()->activate();
 
 	width = std::max(width, 1);
 	height = std::max(height, 1);
@@ -3554,7 +3547,7 @@ void MainWindow::displayResizeRequested(qint32 width, qint32 height, bool force_
 	};
 
 #ifdef DISPLAY_SURFACE_WINDOW
-	if (!m_display_container)
+	if (!game_list && !m_display_container)
 	{
 		const QSize display_size = get_display_size(
 			m_display_surface->frameGeometry().size(), m_display_surface->geometry().size(), QSize());
@@ -3564,7 +3557,7 @@ void MainWindow::displayResizeRequested(qint32 width, qint32 height, bool force_
 		return;
 	}
 #else
-	if (!m_display_container->parent())
+	if (!game_list && !m_display_container->parent())
 	{
 		const QSize display_size = get_display_size(
 			m_display_container->frameGeometry().size(), m_display_container->geometry().size(), QSize());
@@ -3575,12 +3568,17 @@ void MainWindow::displayResizeRequested(qint32 width, qint32 height, bool force_
 	}
 #endif
 
-	const QSize chrome_size = size() - m_display_container->size();
+	const QSize chrome_size = size() - m_ui.mainContainer->size();
 	const QSize display_size = get_display_size(frameGeometry().size(), geometry().size(), chrome_size);
 	QtUtils::ResizePotentiallyFixedSizeWindow(
 		this, display_size.width() + chrome_size.width(), display_size.height() + chrome_size.height());
 	if (center_window)
-		centerDisplayWindow();
+	{
+		if (game_list)
+			centerMainWindow();
+		else
+			centerDisplayWindow();
+	}
 }
 
 void MainWindow::mouseModeRequested(bool relative_mode, bool hide_cursor)

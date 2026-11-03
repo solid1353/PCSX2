@@ -250,9 +250,6 @@ void GameListWidget::initialize()
 	m_ui.filterBar->setVisible(Host::GetBaseBoolSettingValue("UI", "ShowGameListFilterBar", true));
 	m_ui.stack->installEventFilter(this);
 	m_ui.stack->setAutoFillBackground(false);
-	QShortcut* rescan_shortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), m_ui.stack, this,
-		&GameListWidget::rescanRequested, Qt::WidgetWithChildrenShortcut);
-	rescan_shortcut->setAutoRepeat(false);
 
 	for (u32 type = 0; type < static_cast<u32>(GameList::EntryType::Count); type++)
 	{
@@ -284,10 +281,6 @@ void GameListWidget::initialize()
 		m_sort_model->setFilterName(text);
 	});
 
-	connect(new QShortcut(QKeySequence::Find, this), &QShortcut::activated, [this]() {
-		setFilterBarVisible(true);
-		m_ui.searchText->setFocus();
-	});
 
 	m_table_view = new QTableView(m_ui.stack);
 	m_table_view->setModel(m_sort_model);
@@ -368,19 +361,32 @@ void GameListWidget::initialize()
 
 	m_ui.stack->insertWidget(1, m_list_view);
 
+	const auto add_shortcut = [this](const char* name, QWidget* parent, const std::function<void()>& handler) {
+		QShortcut* shortcut = new QShortcut(parent);
+		shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+		shortcut->setAutoRepeat(false);
+		connect(shortcut, &QShortcut::activated, this, handler);
+		m_hotkey_shortcuts.emplace_back(name, shortcut);
+	};
+	add_shortcut("GameListRescan", m_ui.stack, [this]() { emit rescanRequested(); });
+	add_shortcut("GameListSearch", this, [this]() {
+		setFilterBarVisible(true);
+		m_ui.searchText->setFocus();
+	});
+	add_shortcut("RecenterDisplay", this, [this]() { emit recenterRequested(); });
+	add_shortcut("GameListZoomIn", m_list_view, [this]() { gridZoomIn(); });
+	add_shortcut("GameListZoomOut", m_list_view, [this]() { gridZoomOut(); });
 	for (QWidget* view : {static_cast<QWidget*>(m_table_view), static_cast<QWidget*>(m_list_view)})
 	{
-		QShortcut* rename_shortcut = new QShortcut(QKeySequence(Qt::Key_F2), view, this, [this]() {
+		add_shortcut("GameListRename", view, [this]() {
 			const std::optional<GameList::Entry> entry = getSelectedEntry();
 			if (entry.has_value())
-				emit entryRenameRequested(QString::fromStdString(entry->path)); }, Qt::WidgetWithChildrenShortcut);
-		rename_shortcut->setAutoRepeat(false);
+				emit entryRenameRequested(QString::fromStdString(entry->path)); });
 
-		QShortcut* delete_shortcut = new QShortcut(QKeySequence(Qt::Key_Delete), view, this, [this]() {
+		add_shortcut("GameListDelete", view, [this]() {
 			const std::optional<GameList::Entry> entry = getSelectedEntry();
 			if (entry.has_value())
-				emit entryDeleteRequested(QString::fromStdString(entry->path)); }, Qt::WidgetWithChildrenShortcut);
-		delete_shortcut->setAutoRepeat(false);
+				emit entryDeleteRequested(QString::fromStdString(entry->path)); });
 	}
 
 	m_empty_widget = new QWidget(m_ui.stack);
@@ -401,6 +407,13 @@ void GameListWidget::initialize()
 	updateToolbar();
 	resizeTableViewColumnsToFit();
 	setCustomBackground();
+	reloadHotkeyBindings();
+}
+
+void GameListWidget::reloadHotkeyBindings()
+{
+	for (const auto& [name, shortcut] : m_hotkey_shortcuts)
+		shortcut->setKeys(QtUtils::GetHotkeyShortcuts(name));
 }
 
 void GameListWidget::setCustomBackground()
@@ -867,6 +880,7 @@ void GameListWidget::updateToolbar()
 
 void GameListWidget::showEvent(QShowEvent* event)
 {
+	reloadHotkeyBindings();
 	QWidget::showEvent(event);
 	updateCustomBackgroundState();
 	processBackgroundFrames();

@@ -21,6 +21,7 @@ Q_DECLARE_METATYPE(const GameList::Entry*);
 class GameListModel;
 class GameListSortModel;
 class GameListRefreshThread;
+class QShortcut;
 
 class GameListGridListView : public QListView
 {
@@ -48,6 +49,7 @@ public:
 	__fi GameListModel* getModel() const { return m_model; }
 
 	void initialize();
+	void reloadHotkeyBindings();
 	void resizeTableViewColumnsToFit();
 
 	void refresh(bool invalidate_cache, bool popup_on_error);
@@ -79,6 +81,7 @@ Q_SIGNALS:
 	void entryRenameRequested(const QString& path);
 	void entryDeleteRequested(const QString& path);
 	void rescanRequested();
+	void recenterRequested();
 
 	void addGameDirectoryRequested();
 	void layoutChange();
@@ -135,6 +138,7 @@ private:
 	Ui::EmptyGameListWidget m_empty_ui;
 
 	GameListRefreshThread* m_refresh_thread = nullptr;
+	std::vector<std::pair<const char*, QShortcut*>> m_hotkey_shortcuts;
 
 	QMovie* m_background_movie = nullptr;
 	QPixmap m_background_pixmap;

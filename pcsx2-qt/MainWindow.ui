@@ -850,9 +850,6 @@
    <property name="text">
     <string>Zoom &amp;In (Grid View)</string>
    </property>
-   <property name="shortcut">
-    <string>Ctrl++</string>
-   </property>
   </action>
   <action name="actionGridViewZoomOut">
    <property name="icon">
@@ -860,9 +857,6 @@
    </property>
    <property name="text">
     <string>Zoom &amp;Out (Grid View)</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl+-</string>
    </property>
   </action>
   <action name="actionGridViewRefreshCovers">

@@ -4,6 +4,8 @@
 #include "QtUtils.h"
 
 #include "pcsx2/Input/InputManager.h"
+#include "pcsx2/Host.h"
+#include "common/SettingsInterface.h"
 
 #include "common/Pcsx2Defs.h"
 #include "common/StringUtil.h"
@@ -603,6 +605,92 @@ const char* InputManager::ConvertHostKeyboardCodeToIcon(u32 code)
 	}
 
 	return nullptr;
+}
+
+QKeySequence QtUtils::KeySequenceFromInputBinding(std::string_view binding)
+{
+	Qt::KeyboardModifiers modifiers;
+	Qt::Key key = Qt::Key_unknown;
+	for (std::string_view part : InputManager::SplitChord(binding))
+	{
+		if (!part.starts_with("Keyboard/"))
+			return {};
+		const std::optional<u32> code = InputManager::ConvertHostKeyboardStringToCode(part.substr(9));
+		if (!code)
+			return {};
+		switch (*code)
+		{
+			case Qt::Key_Control:
+				modifiers |= Qt::ControlModifier;
+				break;
+			case Qt::Key_Shift:
+				modifiers |= Qt::ShiftModifier;
+				break;
+			case Qt::Key_Alt:
+				modifiers |= Qt::AltModifier;
+				break;
+			case Qt::Key_Meta:
+				modifiers |= Qt::MetaModifier;
+				break;
+			default:
+				if (key != Qt::Key_unknown)
+					return {};
+				key = static_cast<Qt::Key>(*code & ~Qt::KeyboardModifierMask);
+				modifiers |= Qt::KeyboardModifiers(*code & Qt::KeyboardModifierMask);
+				break;
+		}
+	}
+	return key == Qt::Key_unknown ? QKeySequence() : QKeySequence(QKeyCombination(modifiers, key));
+}
+
+std::string QtUtils::KeySequenceToInputBinding(const QKeySequence& sequence)
+{
+	if (sequence.isEmpty())
+		return {};
+
+	const QKeyCombination combination = sequence[0];
+	std::string binding;
+	const auto append_key = [&binding](u32 code) {
+		const std::optional<std::string> name = InputManager::ConvertHostKeyboardCodeToString(code);
+		if (!name)
+			return false;
+		if (!binding.empty())
+			binding += " & ";
+		binding += "Keyboard/" + *name;
+		return true;
+	};
+	const Qt::KeyboardModifiers modifiers = combination.keyboardModifiers();
+	if (modifiers & Qt::ControlModifier)
+		append_key(Qt::Key_Control);
+	if (modifiers & Qt::ShiftModifier)
+		append_key(Qt::Key_Shift);
+	if (modifiers & Qt::AltModifier)
+		append_key(Qt::Key_Alt);
+	if (modifiers & Qt::MetaModifier)
+		append_key(Qt::Key_Meta);
+	if (!append_key(static_cast<u32>(combination.key()) | (modifiers & Qt::KeypadModifier)))
+		return {};
+	return binding;
+}
+
+QList<QKeySequence> QtUtils::GetHotkeyShortcuts(const char* name)
+{
+	QList<QKeySequence> shortcuts;
+	const HotkeyInfo* hotkey = InputManager::GetHotkeyInfo(name);
+	if (!hotkey)
+		return shortcuts;
+
+	auto lock = Host::GetSettingsLock();
+	SettingsInterface* si = Host::Internal::GetInputSettingsLayer();
+	if (!si || !si->GetBoolValue("Pad", "UseProfileHotkeyBindings", false))
+		si = Host::Internal::GetBaseSettingsLayer();
+	for (const std::string& binding : InputManager::GetHotkeyBindings(*si, *hotkey))
+	{
+		const QKeySequence sequence = KeySequenceFromInputBinding(binding);
+		if (!sequence.isEmpty())
+			shortcuts.push_back(sequence);
+	}
+	return shortcuts;
 }
 
 u32 QtUtils::KeyEventToCode(const QKeyEvent* ev)

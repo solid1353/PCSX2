@@ -863,13 +863,40 @@ std::vector<const HotkeyInfo*> InputManager::GetHotkeyList()
 	return ret;
 }
 
+const HotkeyInfo* InputManager::GetHotkeyInfo(std::string_view name)
+{
+	for (const HotkeyInfo* hotkey_list : s_hotkey_list)
+	{
+		for (const HotkeyInfo* hotkey = hotkey_list; hotkey->name; hotkey++)
+		{
+			if (name == hotkey->name)
+				return hotkey;
+		}
+	}
+	return nullptr;
+}
+
+std::vector<std::string> InputManager::GetHotkeyBindings(SettingsInterface& si, const HotkeyInfo& hotkey)
+{
+	if (!si.ContainsValue("Hotkeys", hotkey.name) && hotkey.default_binding)
+		return {hotkey.default_binding};
+
+	std::vector<std::string> bindings = si.GetStringList("Hotkeys", hotkey.name);
+	std::erase(bindings, std::string());
+	return bindings;
+}
+
 void InputManager::AddHotkeyBindings(SettingsInterface& si, bool is_profile)
 {
 	for (const HotkeyInfo* hotkey_list : s_hotkey_list)
 	{
 		for (const HotkeyInfo* hotkey = hotkey_list; hotkey->name != nullptr; hotkey++)
 		{
-			const std::vector<std::string> bindings(si.GetStringList("Hotkeys", hotkey->name));
+			// Qt handles interface-only keyboard shortcuts in their widget context.
+			if (!hotkey->handler)
+				continue;
+
+			const std::vector<std::string> bindings(GetHotkeyBindings(si, *hotkey));
 			if (bindings.empty())
 				continue;
 

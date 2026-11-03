@@ -1022,6 +1022,9 @@ void MainWindow::connectSignals()
 	connect(m_game_list_widget, &GameListWidget::rescanRequested, this, [this]() {
 		if (m_ui.actionRescanAllGames->isEnabled())
 			m_ui.actionRescanAllGames->trigger(); }, Qt::QueuedConnection);
+	connect(m_game_list_widget, &GameListWidget::recenterRequested, this, [this]() {
+		if (m_game_list_widget->isVisible() && !isFullScreen())
+			recenterWindow(); }, Qt::QueuedConnection);
 	connect(m_game_list_widget, &GameListWidget::selectionChanged, this, &MainWindow::onGameListSelectionChanged, Qt::QueuedConnection);
 	connect(m_game_list_widget, &GameListWidget::entryActivated, this, &MainWindow::onGameListEntryActivated, Qt::QueuedConnection);
 	connect(m_game_list_widget, &GameListWidget::entryContextMenuRequested, this, &MainWindow::onGameListEntryContextMenuRequested,
@@ -2177,12 +2180,18 @@ void MainWindow::requestExit(bool allow_confirm)
 
 void MainWindow::checkForSettingChanges()
 {
+	reloadHotkeyBindings();
 	if (m_display_surface)
 		updateDisplayWidgetCursor();
 
 	updateWindowState();
 
 	LogWindow::updateSettings();
+}
+
+void MainWindow::reloadHotkeyBindings()
+{
+	m_game_list_widget->reloadHotkeyBindings();
 }
 
 std::optional<WindowInfo> MainWindow::getWindowInfo()
@@ -2860,6 +2869,7 @@ void MainWindow::onVMStarting()
 
 void MainWindow::onVMStarted()
 {
+	reloadHotkeyBindings();
 	s_vm_valid = true;
 	m_was_disc_change_request = false;
 	updateEmulationActions(true, true, false);
@@ -2926,6 +2936,7 @@ void MainWindow::onVMResumed()
 
 void MainWindow::onVMStopped()
 {
+	reloadHotkeyBindings();
 	s_vm_valid = false;
 	s_vm_paused = false;
 
@@ -3434,7 +3445,7 @@ void MainWindow::createDisplayWidget(bool fullscreen, bool render_to_main)
 
 void MainWindow::recenterWindow()
 {
-	if (s_vm_valid)
+	if (s_vm_valid && !(isActiveWindow() && m_game_list_widget->isVisible()))
 	{
 		if (m_display_surface)
 			g_emu_thread->requestCenteredDisplaySize();

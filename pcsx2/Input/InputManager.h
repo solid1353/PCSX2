@@ -132,7 +132,9 @@ struct HotkeyInfo
 	const char* name;
 	const char* category;
 	const char* display_name;
+	// A null handler is a keyboard shortcut handled by the desktop interface.
 	void (*handler)(s32 pressed);
+	const char* default_binding = nullptr;
 };
 #define DECLARE_HOTKEY_LIST(name) extern const HotkeyInfo name[]
 #define BEGIN_HOTKEY_LIST(name) const HotkeyInfo name[] = {
@@ -232,6 +234,8 @@ namespace InputManager
 
 	/// Returns a list of all hotkeys.
 	std::vector<const HotkeyInfo*> GetHotkeyList();
+	const HotkeyInfo* GetHotkeyInfo(std::string_view name);
+	std::vector<std::string> GetHotkeyBindings(SettingsInterface& si, const HotkeyInfo& hotkey);
 
 	/// Enumerates available devices. Returns a pair of the prefix (e.g. SDL-0) and the device name.
 	std::vector<std::pair<std::string, std::string>> EnumerateDevices();

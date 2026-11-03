@@ -12,6 +12,28 @@
 
 #include <optional>
 
+TEST(HotkeyBindings, DefaultsApplyOnlyToUnspecifiedBindings)
+{
+	MemorySettingsInterface settings;
+	const HotkeyInfo hotkey{"Example", "Game List", "Example", nullptr, "Keyboard/Control & Keyboard/R"};
+	EXPECT_EQ(InputManager::GetHotkeyBindings(settings, hotkey),
+		(std::vector<std::string>{"Keyboard/Control & Keyboard/R"}));
+	EXPECT_FALSE(settings.ContainsValue("Hotkeys", "Example"));
+
+	settings.SetStringValue("Hotkeys", "Example", "Keyboard/F7");
+	EXPECT_EQ(InputManager::GetHotkeyBindings(settings, hotkey), (std::vector<std::string>{"Keyboard/F7"}));
+
+	settings.SetStringValue("Hotkeys", "Example", "");
+	EXPECT_TRUE(InputManager::GetHotkeyBindings(settings, hotkey).empty());
+}
+
+TEST(HotkeyBindings, MissingBindingsWithoutDefaultsStayUnbound)
+{
+	MemorySettingsInterface settings;
+	const HotkeyInfo hotkey{"Example", "Navigation", "Example", nullptr};
+	EXPECT_TRUE(InputManager::GetHotkeyBindings(settings, hotkey).empty());
+}
+
 namespace
 {
 	class KeyboardPadChordTest : public testing::Test

@@ -215,6 +215,12 @@ void Pad::SetDefaultControllerConfig(SettingsInterface& si)
 
 void Pad::SetDefaultHotkeyConfig(SettingsInterface& si)
 {
+	for (const HotkeyInfo* hotkey : InputManager::GetHotkeyList())
+	{
+		if (hotkey->default_binding)
+			si.SetStringValue("Hotkeys", hotkey->name, hotkey->default_binding);
+	}
+
 	// PCSX2 Controller Settings - Hotkeys
 
 	// PCSX2 Controller Settings - Hotkeys - General

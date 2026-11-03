@@ -10,6 +10,7 @@
 #include <QtCore/QString>
 #include <QtCore/QAbstractItemModel>
 #include <QtGui/QGuiApplication>
+#include <QtGui/QKeySequence>
 #include <QtGui/QWindow>
 #if !defined(_WIN32) and !defined(__APPLE__)
 #include <qpa/qplatformnativeinterface.h>
@@ -77,6 +78,10 @@ namespace QtUtils
 	/// Returns a key id for a key event, including any modifiers that we need (e.g. Keypad).
 	/// NOTE: Defined in QtKeyCodes.cpp, not QtUtils.cpp.
 	u32 KeyEventToCode(const QKeyEvent* ev);
+
+	QKeySequence KeySequenceFromInputBinding(std::string_view binding);
+	std::string KeySequenceToInputBinding(const QKeySequence& sequence);
+	QList<QKeySequence> GetHotkeyShortcuts(const char* name);
 
 	/// Shows a file, or the containing folder if unsupported, with the system file explorer
 	void ShowInFileExplorer(QWidget* parent, const QFileInfo& file);

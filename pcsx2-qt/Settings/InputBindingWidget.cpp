@@ -242,15 +242,23 @@ void InputBindingWidget::setNewBinding()
 
 void InputBindingWidget::clearBinding()
 {
+	const HotkeyInfo* hotkey = m_section_name == "Hotkeys" ? InputManager::GetHotkeyInfo(m_key_name) : nullptr;
+	const bool has_default = hotkey && hotkey->default_binding;
 	if (m_sif)
 	{
-		m_sif->DeleteValue(m_section_name.c_str(), m_key_name.c_str());
+		if (has_default)
+			m_sif->SetStringValue(m_section_name.c_str(), m_key_name.c_str(), "");
+		else
+			m_sif->DeleteValue(m_section_name.c_str(), m_key_name.c_str());
 		m_sif->Save();
 		g_emu_thread->reloadGameSettings();
 	}
 	else
 	{
-		Host::RemoveBaseSettingValue(m_section_name.c_str(), m_key_name.c_str());
+		if (has_default)
+			Host::SetBaseStringSettingValue(m_section_name.c_str(), m_key_name.c_str(), "");
+		else
+			Host::RemoveBaseSettingValue(m_section_name.c_str(), m_key_name.c_str());
 		Host::CommitBaseSettingChanges();
 		g_emu_thread->reloadInputBindings();
 	}
@@ -259,8 +267,17 @@ void InputBindingWidget::clearBinding()
 
 void InputBindingWidget::reloadBinding()
 {
-	m_bindings_settings = m_sif ? m_sif->GetStringList(m_section_name.c_str(), m_key_name.c_str()) :
-	                              Host::GetBaseStringListSetting(m_section_name.c_str(), m_key_name.c_str());
+	const HotkeyInfo* hotkey = m_section_name == "Hotkeys" ? InputManager::GetHotkeyInfo(m_key_name) : nullptr;
+	if (hotkey)
+	{
+		auto lock = Host::GetSettingsLock();
+		m_bindings_settings = InputManager::GetHotkeyBindings(m_sif ? *m_sif : *Host::Internal::GetBaseSettingsLayer(), *hotkey);
+	}
+	else
+	{
+		m_bindings_settings = m_sif ? m_sif->GetStringList(m_section_name.c_str(), m_key_name.c_str()) :
+		                              Host::GetBaseStringListSetting(m_section_name.c_str(), m_key_name.c_str());
+	}
 
 	m_bindings_ui.clear();
 	m_bindings_ui.reserve(m_bindings_settings.size());

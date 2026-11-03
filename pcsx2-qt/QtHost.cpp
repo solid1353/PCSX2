@@ -812,6 +812,8 @@ void EmuThread::reloadInputBindings()
 	}
 
 	VMManager::ReloadInputBindings();
+	if (g_main_window)
+		QMetaObject::invokeMethod(g_main_window, &MainWindow::reloadHotkeyBindings, Qt::QueuedConnection);
 }
 
 void EmuThread::reloadInputDevices()
@@ -2200,18 +2202,29 @@ std::unique_ptr<ProgressCallback> Host::CreateHostProgressCallback()
 // Hotkeys
 //////////////////////////////////////////////////////////////////////////
 
+// clang-format off
 BEGIN_HOTKEY_LIST(g_host_hotkeys)
-DEFINE_HOTKEY("RecenterDisplay", TRANSLATE_NOOP("Hotkeys", "Navigation"), TRANSLATE_NOOP("Hotkeys", "Recenter Display"),
+{"RecenterDisplay", TRANSLATE_NOOP("Hotkeys", "Navigation"), TRANSLATE_NOOP("Hotkeys", "Recenter Display"),
 	[](s32 pressed) {
 		if (pressed == 0 && g_emu_thread && !g_emu_thread->isFullscreen())
 			QMetaObject::invokeMethod(g_main_window, "recenterWindow", Qt::QueuedConnection);
-	})
+	}, "Keyboard/Control & Keyboard/W"},
+#define DEFINE_GAME_LIST_HOTKEY(name, label, binding) \
+	{name, TRANSLATE_NOOP("Hotkeys", "Game List"), label, nullptr, binding},
+DEFINE_GAME_LIST_HOTKEY("GameListRescan", TRANSLATE_NOOP("Hotkeys", "Rescan All Games"), "Keyboard/Control & Keyboard/R")
+DEFINE_GAME_LIST_HOTKEY("GameListSearch", TRANSLATE_NOOP("Hotkeys", "Search"), "Keyboard/Control & Keyboard/F")
+DEFINE_GAME_LIST_HOTKEY("GameListRename", TRANSLATE_NOOP("Hotkeys", "Rename File"), "Keyboard/F2")
+DEFINE_GAME_LIST_HOTKEY("GameListDelete", TRANSLATE_NOOP("Hotkeys", "Delete File"), "Keyboard/Delete")
+DEFINE_GAME_LIST_HOTKEY("GameListZoomIn", TRANSLATE_NOOP("Hotkeys", "Zoom In (Grid View)"), "Keyboard/Control & Keyboard/Plus")
+DEFINE_GAME_LIST_HOTKEY("GameListZoomOut", TRANSLATE_NOOP("Hotkeys", "Zoom Out (Grid View)"), "Keyboard/Control & Keyboard/Minus")
+#undef DEFINE_GAME_LIST_HOTKEY
 DEFINE_HOTKEY("Mute", TRANSLATE_NOOP("Hotkeys", "Audio"), TRANSLATE_NOOP("Hotkeys", "Toggle Mute"), [](s32 pressed) {
 	// Mutes like the status bar mute button, so the choice is saved.
 	if (!pressed && VMManager::HasValidVM())
 		QMetaObject::invokeMethod(g_main_window, "toggleMute", Qt::QueuedConnection);
 })
 END_HOTKEY_LIST()
+// clang-format on
 
 
 //////////////////////////////////////////////////////////////////////////

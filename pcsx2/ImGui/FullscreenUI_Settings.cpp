@@ -246,7 +246,9 @@ void FullscreenUI::DrawInputBindingButton(
 	TinyString title;
 	title.format("{}/{}", section, name);
 
-	SmallString value = bsi->GetSmallStringValue(section, name);
+	const HotkeyInfo* hotkey = std::strcmp(section, "Hotkeys") == 0 ? InputManager::GetHotkeyInfo(name) : nullptr;
+	SmallString value = bsi->GetSmallStringValue(section, name,
+		hotkey && hotkey->default_binding ? hotkey->default_binding : "");
 	const bool oneline = (value.count('&') <= 1);
 
 	ImRect bb;
@@ -331,7 +333,10 @@ void FullscreenUI::DrawInputBindingButton(
 	}
 	else if (hovered && (ImGui::IsItemClicked(ImGuiMouseButton_Right) || ImGui::Shortcut(ImGuiKey_NavGamepadMenu)))
 	{
-		bsi->DeleteValue(section, name);
+		if (hotkey && hotkey->default_binding)
+			bsi->SetStringValue(section, name, "");
+		else
+			bsi->DeleteValue(section, name);
 		SetSettingsChanged(bsi);
 	}
 	else
@@ -5562,6 +5567,9 @@ void FullscreenUI::DrawHotkeySettingsPage()
 	const HotkeyInfo* last_category = nullptr;
 	for (const HotkeyInfo* hotkey : s_hotkey_list_cache)
 	{
+		if (!hotkey->handler)
+			continue;
+
 		if (!last_category || std::strcmp(hotkey->category, last_category->category) != 0)
 		{
 			MenuHeading(Host::TranslateToCString("Hotkeys", hotkey->category));

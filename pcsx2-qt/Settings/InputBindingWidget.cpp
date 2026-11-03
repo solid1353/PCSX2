@@ -242,11 +242,9 @@ void InputBindingWidget::setNewBinding()
 
 void InputBindingWidget::clearBinding()
 {
-	const HotkeyInfo* hotkey = m_section_name == "Hotkeys" ? InputManager::GetHotkeyInfo(m_key_name) : nullptr;
-	const bool has_default = hotkey && hotkey->default_binding;
 	if (m_sif)
 	{
-		if (has_default)
+		if (m_section_name == "Hotkeys")
 			m_sif->SetStringValue(m_section_name.c_str(), m_key_name.c_str(), "");
 		else
 			m_sif->DeleteValue(m_section_name.c_str(), m_key_name.c_str());
@@ -255,7 +253,7 @@ void InputBindingWidget::clearBinding()
 	}
 	else
 	{
-		if (has_default)
+		if (m_section_name == "Hotkeys")
 			Host::SetBaseStringSettingValue(m_section_name.c_str(), m_key_name.c_str(), "");
 		else
 			Host::RemoveBaseSettingValue(m_section_name.c_str(), m_key_name.c_str());

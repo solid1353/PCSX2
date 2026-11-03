@@ -246,9 +246,7 @@ void FullscreenUI::DrawInputBindingButton(
 	TinyString title;
 	title.format("{}/{}", section, name);
 
-	const HotkeyInfo* hotkey = std::strcmp(section, "Hotkeys") == 0 ? InputManager::GetHotkeyInfo(name) : nullptr;
-	SmallString value = bsi->GetSmallStringValue(section, name,
-		hotkey && hotkey->default_binding ? hotkey->default_binding : "");
+	SmallString value = bsi->GetSmallStringValue(section, name);
 	const bool oneline = (value.count('&') <= 1);
 
 	ImRect bb;
@@ -333,7 +331,7 @@ void FullscreenUI::DrawInputBindingButton(
 	}
 	else if (hovered && (ImGui::IsItemClicked(ImGuiMouseButton_Right) || ImGui::Shortcut(ImGuiKey_NavGamepadMenu)))
 	{
-		if (hotkey && hotkey->default_binding)
+		if (std::strcmp(section, "Hotkeys") == 0)
 			bsi->SetStringValue(section, name, "");
 		else
 			bsi->DeleteValue(section, name);

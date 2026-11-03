@@ -878,9 +878,6 @@ const HotkeyInfo* InputManager::GetHotkeyInfo(std::string_view name)
 
 std::vector<std::string> InputManager::GetHotkeyBindings(SettingsInterface& si, const HotkeyInfo& hotkey)
 {
-	if (!si.ContainsValue("Hotkeys", hotkey.name) && hotkey.default_binding)
-		return {hotkey.default_binding};
-
 	std::vector<std::string> bindings = si.GetStringList("Hotkeys", hotkey.name);
 	std::erase(bindings, std::string());
 	return bindings;

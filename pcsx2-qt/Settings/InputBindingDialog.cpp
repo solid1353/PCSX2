@@ -265,13 +265,11 @@ void InputBindingDialog::updateList()
 
 void InputBindingDialog::saveListToSettings()
 {
-	const HotkeyInfo* hotkey = m_section_name == "Hotkeys" ? InputManager::GetHotkeyInfo(m_key_name) : nullptr;
-	const bool has_default = hotkey && hotkey->default_binding;
 	if (m_sif)
 	{
 		if (!m_bindings_settings.empty())
 			m_sif->SetStringList(m_section_name.c_str(), m_key_name.c_str(), m_bindings_settings);
-		else if (has_default)
+		else if (m_section_name == "Hotkeys")
 			m_sif->SetStringValue(m_section_name.c_str(), m_key_name.c_str(), "");
 		else
 			m_sif->DeleteValue(m_section_name.c_str(), m_key_name.c_str());
@@ -282,7 +280,7 @@ void InputBindingDialog::saveListToSettings()
 	{
 		if (!m_bindings_settings.empty())
 			Host::SetBaseStringListSettingValue(m_section_name.c_str(), m_key_name.c_str(), m_bindings_settings);
-		else if (has_default)
+		else if (m_section_name == "Hotkeys")
 			Host::SetBaseStringSettingValue(m_section_name.c_str(), m_key_name.c_str(), "");
 		else
 			Host::RemoveBaseSettingValue(m_section_name.c_str(), m_key_name.c_str());

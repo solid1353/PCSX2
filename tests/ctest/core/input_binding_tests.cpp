@@ -12,12 +12,11 @@
 
 #include <optional>
 
-TEST(HotkeyBindings, DefaultsApplyOnlyToUnspecifiedBindings)
+TEST(HotkeyBindings, ActiveBindingsComeOnlyFromSettings)
 {
 	MemorySettingsInterface settings;
 	const HotkeyInfo hotkey{"Example", "Game List", "Example", nullptr, "Keyboard/Control & Keyboard/R"};
-	EXPECT_EQ(InputManager::GetHotkeyBindings(settings, hotkey),
-		(std::vector<std::string>{"Keyboard/Control & Keyboard/R"}));
+	EXPECT_TRUE(InputManager::GetHotkeyBindings(settings, hotkey).empty());
 	EXPECT_FALSE(settings.ContainsValue("Hotkeys", "Example"));
 
 	settings.SetStringValue("Hotkeys", "Example", "Keyboard/F7");
@@ -25,12 +24,7 @@ TEST(HotkeyBindings, DefaultsApplyOnlyToUnspecifiedBindings)
 
 	settings.SetStringValue("Hotkeys", "Example", "");
 	EXPECT_TRUE(InputManager::GetHotkeyBindings(settings, hotkey).empty());
-}
-
-TEST(HotkeyBindings, MissingBindingsWithoutDefaultsStayUnbound)
-{
-	MemorySettingsInterface settings;
-	const HotkeyInfo hotkey{"Example", "Navigation", "Example", nullptr};
+	settings.DeleteValue("Hotkeys", "Example");
 	EXPECT_TRUE(InputManager::GetHotkeyBindings(settings, hotkey).empty());
 }
 

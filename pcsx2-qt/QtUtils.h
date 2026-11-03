@@ -80,7 +80,6 @@ namespace QtUtils
 	u32 KeyEventToCode(const QKeyEvent* ev);
 
 	QKeySequence KeySequenceFromInputBinding(std::string_view binding);
-	std::string KeySequenceToInputBinding(const QKeySequence& sequence);
 	QList<QKeySequence> GetHotkeyShortcuts(const char* name);
 
 	/// Shows a file, or the containing folder if unsupported, with the system file explorer

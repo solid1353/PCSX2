@@ -643,36 +643,6 @@ QKeySequence QtUtils::KeySequenceFromInputBinding(std::string_view binding)
 	return key == Qt::Key_unknown ? QKeySequence() : QKeySequence(QKeyCombination(modifiers, key));
 }
 
-std::string QtUtils::KeySequenceToInputBinding(const QKeySequence& sequence)
-{
-	if (sequence.isEmpty())
-		return {};
-
-	const QKeyCombination combination = sequence[0];
-	std::string binding;
-	const auto append_key = [&binding](u32 code) {
-		const std::optional<std::string> name = InputManager::ConvertHostKeyboardCodeToString(code);
-		if (!name)
-			return false;
-		if (!binding.empty())
-			binding += " & ";
-		binding += "Keyboard/" + *name;
-		return true;
-	};
-	const Qt::KeyboardModifiers modifiers = combination.keyboardModifiers();
-	if (modifiers & Qt::ControlModifier)
-		append_key(Qt::Key_Control);
-	if (modifiers & Qt::ShiftModifier)
-		append_key(Qt::Key_Shift);
-	if (modifiers & Qt::AltModifier)
-		append_key(Qt::Key_Alt);
-	if (modifiers & Qt::MetaModifier)
-		append_key(Qt::Key_Meta);
-	if (!append_key(static_cast<u32>(combination.key()) | (modifiers & Qt::KeypadModifier)))
-		return {};
-	return binding;
-}
-
 QList<QKeySequence> QtUtils::GetHotkeyShortcuts(const char* name)
 {
 	QList<QKeySequence> shortcuts;

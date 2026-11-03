@@ -123,6 +123,22 @@ static QString s_path_to_recording_for_record_on_start;
 
 static constexpr const char* TOOLBAR_ACTION_MIME_TYPE = "application/x-pcsx2-toolbar-action";
 
+static QSize getCenteredContentSize(float aspect_ratio, const QSize& frame_size,
+	const QSize& window_size, const QSize& chrome_size)
+{
+	const QSize maximum_size = QSize(RECENTER_FRAME_WIDTH, RECENTER_FRAME_HEIGHT) - (frame_size - window_size) - chrome_size;
+	const int maximum_width = std::max(maximum_size.width(), 1);
+	const int maximum_height = std::max(maximum_size.height(), 1);
+	int width = maximum_width;
+	int height = std::max(static_cast<int>(std::lroundf(static_cast<float>(width) / aspect_ratio)), 1);
+	if (height > maximum_height)
+	{
+		height = maximum_height;
+		width = std::max(static_cast<int>(std::lroundf(static_cast<float>(height) * aspect_ratio)), 1);
+	}
+	return QSize(width, height);
+}
+
 namespace
 {
 	class StatusLabel final : public QLabel
@@ -3452,9 +3468,10 @@ void MainWindow::recenterWindow()
 	}
 	else
 	{
-		const QSize frame_chrome_size = frameGeometry().size() - geometry().size();
+		const QSize chrome_size = size() - m_game_list_widget->size();
+		const QSize content_size = getCenteredContentSize(4.0f / 3.0f, frameGeometry().size(), geometry().size(), chrome_size);
 		QtUtils::ResizePotentiallyFixedSizeWindow(this,
-			RECENTER_FRAME_WIDTH - frame_chrome_size.width(), RECENTER_FRAME_HEIGHT - frame_chrome_size.height());
+			content_size.width() + chrome_size.width(), content_size.height() + chrome_size.height());
 		centerMainWindow();
 	}
 }
@@ -3533,22 +3550,7 @@ void MainWindow::displayResizeRequested(qint32 width, qint32 height, bool force_
 		if (!center_window)
 			return requested_display_size;
 
-		const QSize target_frame_size(RECENTER_FRAME_WIDTH, RECENTER_FRAME_HEIGHT);
-		const QSize frame_chrome_size = frame_size - window_size;
-		const QSize maximum_display_size = target_frame_size - frame_chrome_size - chrome_size;
-		const int maximum_width = std::max(maximum_display_size.width(), 1);
-		const int maximum_height = std::max(maximum_display_size.height(), 1);
-		const float aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
-
-		int fitted_width = maximum_width;
-		int fitted_height = std::max(static_cast<int>(std::lroundf(static_cast<float>(fitted_width) / aspect_ratio)), 1);
-		if (fitted_height > maximum_height)
-		{
-			fitted_height = maximum_height;
-			fitted_width = std::max(static_cast<int>(std::lroundf(static_cast<float>(fitted_height) * aspect_ratio)), 1);
-		}
-
-		return QSize(fitted_width, fitted_height);
+		return getCenteredContentSize(static_cast<float>(width) / static_cast<float>(height), frame_size, window_size, chrome_size);
 	};
 
 #ifdef DISPLAY_SURFACE_WINDOW

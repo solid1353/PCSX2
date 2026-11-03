@@ -11,9 +11,6 @@
 
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QLabel>
-#include <QtWidgets/QKeySequenceEdit>
-#include "pcsx2/Host.h"
-#include "common/SettingsInterface.h"
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QVBoxLayout>
@@ -87,35 +84,10 @@ void HotkeySettingsWidget::createButtons()
 		QLabel* label = new QLabel(qApp->translate("Hotkeys", hotkey->display_name), m_container);
 		layout->addWidget(label, target_row, 0);
 
-		if (hotkey->handler)
-		{
-			InputBindingWidget* bind = new InputBindingWidget(
-				m_container, m_dialog->getProfileSettingsInterface(), InputBindingInfo::Type::Button, "Hotkeys", hotkey->name);
-			bind->setMinimumWidth(300);
-			layout->addWidget(bind, target_row, 1);
-		}
-		else
-		{
-			QKeySequenceEdit* bind = new QKeySequenceEdit(m_container);
-			bind->setMaximumSequenceLength(1);
-			bind->setFinishingKeyCombinations({});
-			bind->setClearButtonEnabled(true);
-			bind->setMinimumWidth(300);
-			{
-				auto lock = Host::GetSettingsLock();
-				SettingsInterface* si = m_dialog->getProfileSettingsInterface();
-				if (!si)
-					si = Host::Internal::GetBaseSettingsLayer();
-				const std::vector<std::string> bindings = InputManager::GetHotkeyBindings(*si, *hotkey);
-				if (!bindings.empty())
-					bind->setKeySequence(QtUtils::KeySequenceFromInputBinding(bindings.front()));
-			}
-			connect(bind, &QKeySequenceEdit::keySequenceChanged, this, [this, hotkey](const QKeySequence& sequence) {
-				const std::string binding = QtUtils::KeySequenceToInputBinding(sequence);
-				m_dialog->setStringValue("Hotkeys", hotkey->name, binding.c_str());
-			});
-			layout->addWidget(bind, target_row, 1);
-		}
+		InputBindingWidget* bind = new InputBindingWidget(
+			m_container, m_dialog->getProfileSettingsInterface(), InputBindingInfo::Type::Button, "Hotkeys", hotkey->name);
+		bind->setMinimumWidth(300);
+		layout->addWidget(bind, target_row, 1);
 	}
 
 	// Fill remaining space.

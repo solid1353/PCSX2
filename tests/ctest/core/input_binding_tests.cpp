@@ -6,6 +6,7 @@
 #include "LayeredSettingsInterface.h"
 #include "SIO/Pad/Pad.h"
 #include "SIO/Pad/PadBase.h"
+#include "SIO/Pad/PadDualshock2.h"
 #include "common/MemorySettingsInterface.h"
 
 #include <gtest/gtest.h>
@@ -151,4 +152,28 @@ TEST_F(ControllerHotkeyChordTest, CompletedHotkeyChordReleasesAnAlreadyHeldPadIn
 	EXPECT_FLOAT_EQ(PadUp(0), 0.0f);
 	Press("Pointer-0/Button0", 0.0f);
 	EXPECT_FLOAT_EQ(PadUp(0), 0.0f);
+}
+// A stick deflection inside the analog deadzone centers the stick in every direction,
+// including straight left, up and down, where the other axis is exactly zero.
+TEST(DualShock2Deadzone, CentersAxisAlignedDeflectionsInsideTheDeadzone)
+{
+	constexpr float deflection = 10.0f / 255.0f;
+	for (const u32 input : {PadDualshock2::Inputs::PAD_L_LEFT, PadDualshock2::Inputs::PAD_L_RIGHT,
+			 PadDualshock2::Inputs::PAD_L_UP, PadDualshock2::Inputs::PAD_L_DOWN,
+			 PadDualshock2::Inputs::PAD_R_LEFT, PadDualshock2::Inputs::PAD_R_RIGHT,
+			 PadDualshock2::Inputs::PAD_R_UP, PadDualshock2::Inputs::PAD_R_DOWN})
+	{
+		PadDualshock2 pad(0, 0);
+		pad.SetAxisScale(0.2f, 1.0f);
+		pad.Set(input, deflection);
+		EXPECT_FLOAT_EQ(pad.GetEffectiveInput(input), 0.0f) << "input " << input;
+	}
+}
+
+TEST(DualShock2Deadzone, KeepsDeflectionsPastTheDeadzone)
+{
+	PadDualshock2 pad(0, 0);
+	pad.SetAxisScale(0.2f, 1.0f);
+	pad.Set(PadDualshock2::Inputs::PAD_L_LEFT, 0.5f);
+	EXPECT_LT(pad.GetEffectiveInput(PadDualshock2::Inputs::PAD_L_LEFT), 0.0f);
 }

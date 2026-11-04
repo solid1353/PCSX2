@@ -605,31 +605,19 @@ void PadDualshock2::Set(u32 index, float value)
 				posY = this->analogs.ryInvert ? MERGE_F(Inputs::PAD_R_UP, Inputs::PAD_R_DOWN) : MERGE_F(Inputs::PAD_R_DOWN, Inputs::PAD_R_UP);
 			}
 
-			// No point checking if we're at dead center (usually keyboard with no buttons pressed).
-			if (posX != 0.0f || posY != 0.0f)
+			// The deadzone is a circle around the center. Comparing the squared distance
+			// with it keeps straight left, up and down positions inside: the edge from
+			// cos/sin of the stick angle rounds to just below zero on those axes.
+			if ((posX != 0.0f || posY != 0.0f) && (posX * posX + posY * posY) <= (dz * dz))
 			{
-				// Compute the angle at the given position in the stick's square bounding box.
-				const float theta = std::atan2(posY, posX);
-
-				// Compute the position that the edge of the circle would be at, given the angle.
-				const float dzX = std::cos(theta) * dz;
-				const float dzY = std::sin(theta) * dz;
-
-				// We're in the deadzone if our position is less than the circle edge.
-				const bool inX = (posX < 0.0f) ? (posX > dzX) : (posX <= dzX);
-				const bool inY = (posY < 0.0f) ? (posY > dzY) : (posY <= dzY);
-				
-				if (inX && inY)
+				// In deadzone. Set to 127 (center).
+				if (index <= Inputs::PAD_L_LEFT)
 				{
-					// In deadzone. Set to 127 (center).
-					if (index <= Inputs::PAD_L_LEFT)
-					{
-						this->analogs.lx = this->analogs.ly = 127;
-					}
-					else
-					{
-						this->analogs.rx = this->analogs.ry = 127;
-					}	
+					this->analogs.lx = this->analogs.ly = 127;
+				}
+				else
+				{
+					this->analogs.rx = this->analogs.ry = 127;
 				}
 			}
 #undef MERGE_F

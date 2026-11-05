@@ -918,14 +918,12 @@ void GSSetSoftwareRendering(bool software_renderer, GSInterlaceMode new_interlac
 	}
 }
 
-bool GSSaveSnapshotToMemory(u32 window_width, u32 window_height, bool apply_aspect, bool crop_borders,
-	u32* width, u32* height, std::vector<u32>* pixels)
+bool GSSaveSnapshotToMemory(u32* width, u32* height, std::vector<u32>* pixels)
 {
 	if (!g_gs_renderer)
 		return false;
 
-	return g_gs_renderer->SaveSnapshotToMemory(window_width, window_height, apply_aspect, crop_borders,
-		width, height, pixels);
+	return g_gs_renderer->SaveSnapshotToMemory(width, height, pixels);
 }
 
 #ifdef _WIN32

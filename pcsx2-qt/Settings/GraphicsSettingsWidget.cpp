@@ -89,7 +89,15 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_display.PCRTCAntiBlur, "EmuCore/GS", "pcrtc_antiblur", true);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_display.disableInterlaceOffset, "EmuCore/GS", "disable_interlace_offset", false);
 	SettingWidgetBinder::BindWidgetToIntSetting(
-		sif, m_capture.screenshotSize, "EmuCore/GS", "ScreenshotSize", static_cast<int>(GSScreenshotSize::WindowResolution));
+		sif, m_capture.screenshotSize, "EmuCore/GS", "ScreenshotSize", static_cast<int>(GSScreenshotSize::CustomResolution));
+	m_capture.screenshotWidth->setRange(1, Pcsx2Config::GSOptions::MAX_SCREENSHOT_DIMENSION);
+	m_capture.screenshotHeight->setRange(1, Pcsx2Config::GSOptions::MAX_SCREENSHOT_DIMENSION);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_capture.screenshotWidth, "EmuCore/GS", "ScreenshotWidth",
+		Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_WIDTH);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_capture.screenshotHeight, "EmuCore/GS", "ScreenshotHeight",
+		Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_HEIGHT);
+	connect(m_capture.screenshotSize, &QComboBox::currentIndexChanged, this, &GraphicsSettingsWidget::onScreenshotSizeChanged);
+	onScreenshotSizeChanged();
 	SettingWidgetBinder::BindWidgetToIntSetting(
 		sif, m_capture.screenshotFormat, "EmuCore/GS", "ScreenshotFormat", static_cast<int>(GSScreenshotFormat::PNG));
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_display.stretchY, "EmuCore/GS", "StretchY", 100.0f);
@@ -451,9 +459,13 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 
 		dialog()->registerWidgetHelp(m_display.interlacing, tr("Deinterlacing"), tr("Automatic (Default)"), tr("Determines the deinterlacing method to be used on the interlaced screen of the emulated console. Automatic should be able to correctly deinterlace most games, but if you see visibly shaky graphics, try one of the other options."));
 
-		dialog()->registerWidgetHelp(m_capture.screenshotSize, tr("Screenshot Resolution"), tr("Display Resolution"),
-			tr("Determines the resolution at which screenshots will be saved. Internal resolutions preserve more detail at the cost of "
-			   "file size."));
+		dialog()->registerWidgetHelp(m_capture.screenshotSize, tr("Screenshot Resolution"), tr("Custom Resolution (1000 x 750)"),
+			tr("Sets the resolution of all screenshots, including save states and GS dump previews. Custom resolution preserves "
+			   "the aspect ratio and pads the image to the selected width and height."));
+		dialog()->registerWidgetHelp(m_capture.screenshotWidth, tr("Screenshot Width"), tr("1000"),
+			tr("Width in pixels of every screenshot when Custom Resolution is selected."));
+		dialog()->registerWidgetHelp(m_capture.screenshotHeight, tr("Screenshot Height"), tr("750"),
+			tr("Height in pixels of every screenshot when Custom Resolution is selected."));
 
 		dialog()->registerWidgetHelp(m_capture.screenshotFormat, tr("Screenshot Format"), tr("PNG"),
 			tr("Selects the format which will be used to save screenshots. JPEG produces smaller files, but loses detail."));
@@ -1261,6 +1273,13 @@ void GraphicsSettingsWidget::onUpscaleMultiplierChanged()
 		if (m_hw.upscaleMultiplier->itemData(i, TemporaryMultiplierRole).toBool())
 			m_hw.upscaleMultiplier->removeItem(i);
 	}
+}
+
+void GraphicsSettingsWidget::onScreenshotSizeChanged()
+{
+	const bool custom = dialog()->getEffectiveIntValue("EmuCore/GS", "ScreenshotSize",
+							static_cast<int>(GSScreenshotSize::CustomResolution)) == static_cast<int>(GSScreenshotSize::CustomResolution);
+	m_capture.screenshotDimensions->setEnabled(custom);
 }
 
 #include "moc_GraphicsSettingsWidget.cpp"

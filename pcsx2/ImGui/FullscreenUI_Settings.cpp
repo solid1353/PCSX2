@@ -3011,6 +3011,7 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		FSUI_NSTR("Display Resolution (Aspect Corrected)"),
 		FSUI_NSTR("Internal Resolution (Aspect Corrected)"),
 		FSUI_NSTR("Internal Resolution (No Aspect Correction)"),
+		FSUI_NSTR("Custom Resolution"),
 	};
 	static constexpr const char* s_screenshot_formats[] = {
 		FSUI_NSTR("PNG"),
@@ -3117,9 +3118,19 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_TV, "Disable Interlace Offset"),
 		FSUI_CSTR("Disables interlacing offset which may reduce blurring in some situations."), "EmuCore/GS",
 		"disable_interlace_offset", false);
-	DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "Screenshot Resolution"), FSUI_CSTR("Determines the resolution at which screenshots will be saved."),
-		"EmuCore/GS", "ScreenshotSize", static_cast<int>(GSScreenshotSize::WindowResolution), s_screenshot_sizes,
+	DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "Screenshot Resolution"), FSUI_CSTR("Sets the resolution of all screenshots, including save states and GS dump previews."),
+		"EmuCore/GS", "ScreenshotSize", static_cast<int>(GSScreenshotSize::CustomResolution), s_screenshot_sizes,
 		std::size(s_screenshot_sizes), true);
+	const bool custom_screenshot_resolution = GetEffectiveIntSetting(bsi, "EmuCore/GS", "ScreenshotSize",
+												  static_cast<int>(GSScreenshotSize::CustomResolution)) == static_cast<int>(GSScreenshotSize::CustomResolution);
+	DrawIntSpinBoxSetting(bsi, FSUI_ICONSTR(ICON_FA_ARROWS_LEFT_RIGHT, "Screenshot Width"),
+		FSUI_CSTR("Width in pixels of every screenshot when Custom Resolution is selected."), "EmuCore/GS", "ScreenshotWidth",
+		Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_WIDTH, 1, Pcsx2Config::GSOptions::MAX_SCREENSHOT_DIMENSION, 1,
+		FSUI_CSTR("%dpx"), custom_screenshot_resolution);
+	DrawIntSpinBoxSetting(bsi, FSUI_ICONSTR(ICON_FA_ARROWS_UP_DOWN, "Screenshot Height"),
+		FSUI_CSTR("Height in pixels of every screenshot when Custom Resolution is selected."), "EmuCore/GS", "ScreenshotHeight",
+		Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_HEIGHT, 1, Pcsx2Config::GSOptions::MAX_SCREENSHOT_DIMENSION, 1,
+		FSUI_CSTR("%dpx"), custom_screenshot_resolution);
 	DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_PHOTO_FILM, "Screenshot Format"), FSUI_CSTR("Selects the format which will be used to save screenshots."),
 		"EmuCore/GS", "ScreenshotFormat", static_cast<int>(GSScreenshotFormat::PNG), s_screenshot_formats, std::size(s_screenshot_formats),
 		true);
@@ -6051,7 +6062,6 @@ TRANSLATE_NOOP("FullscreenUI", "Selects the aspect ratio to display the game con
 TRANSLATE_NOOP("FullscreenUI", "Selects the aspect ratio for display when a FMV is detected as playing.");
 TRANSLATE_NOOP("FullscreenUI", "Selects the algorithm used to convert the PS2's interlaced output to progressive for display.");
 TRANSLATE_NOOP("FullscreenUI", "Disables interlacing offset which may reduce blurring in some situations.");
-TRANSLATE_NOOP("FullscreenUI", "Determines the resolution at which screenshots will be saved.");
 TRANSLATE_NOOP("FullscreenUI", "Selects the format which will be used to save screenshots.");
 TRANSLATE_NOOP("FullscreenUI", "Selects the quality at which screenshots will be compressed.");
 TRANSLATE_NOOP("FullscreenUI", "%d%%");
@@ -6666,6 +6676,12 @@ TRANSLATE_NOOP("FullscreenUI", "FMV Aspect Ratio Override");
 TRANSLATE_NOOP("FullscreenUI", "Deinterlacing");
 TRANSLATE_NOOP("FullscreenUI", "Disable Interlace Offset");
 TRANSLATE_NOOP("FullscreenUI", "Screenshot Resolution");
+TRANSLATE_NOOP("FullscreenUI", "Custom Resolution");
+TRANSLATE_NOOP("FullscreenUI", "Screenshot Width");
+TRANSLATE_NOOP("FullscreenUI", "Screenshot Height");
+TRANSLATE_NOOP("FullscreenUI", "Sets the resolution of all screenshots, including save states and GS dump previews.");
+TRANSLATE_NOOP("FullscreenUI", "Width in pixels of every screenshot when Custom Resolution is selected.");
+TRANSLATE_NOOP("FullscreenUI", "Height in pixels of every screenshot when Custom Resolution is selected.");
 TRANSLATE_NOOP("FullscreenUI", "Screenshot Format");
 TRANSLATE_NOOP("FullscreenUI", "Screenshot Quality");
 TRANSLATE_NOOP("FullscreenUI", "Vertical Stretch");

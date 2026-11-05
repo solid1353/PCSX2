@@ -881,6 +881,8 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 
 		OpEqu(ExclusiveFullscreenControl) &&
 		OpEqu(ScreenshotSize) &&
+		OpEqu(ScreenshotWidth) &&
+		OpEqu(ScreenshotHeight) &&
 		OpEqu(ScreenshotFormat) &&
 		OpEqu(ScreenshotQuality) &&
 
@@ -941,6 +943,10 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapEnumEx(AspectRatio, "AspectRatio", AspectRatioNames);
 	SettingsWrapEnumEx(FMVAspectRatioSwitch, "FMVAspectRatioSwitch", FMVAspectRatioSwitchNames);
 	SettingsWrapIntEnumEx(ScreenshotSize, "ScreenshotSize");
+	SettingsWrapEntry(ScreenshotWidth);
+	SettingsWrapEntry(ScreenshotHeight);
+	ScreenshotWidth = std::clamp(ScreenshotWidth, 1, MAX_SCREENSHOT_DIMENSION);
+	ScreenshotHeight = std::clamp(ScreenshotHeight, 1, MAX_SCREENSHOT_DIMENSION);
 	SettingsWrapIntEnumEx(ScreenshotFormat, "ScreenshotFormat");
 	SettingsWrapEntry(ScreenshotQuality);
 	SettingsWrapBitBoolEx(OrganizeSnapshotsByGame, "OrganizeScreenshotsByGame");

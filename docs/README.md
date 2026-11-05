@@ -28,6 +28,13 @@ The save state selector closes 2 seconds after the last slot change instead of
 nor its release reaches any hotkey or pad binding
 (`pcsx2/ImGui/ImGuiManager.cpp`).
 
+Screenshot Resolution in Graphics settings controls ordinary screenshots,
+save state screenshots, replay captures, and GS dump previews. Custom Resolution
+uses the configured width and height, initially 1000 x 750, with padding when
+needed to preserve the aspect ratio. The desktop Media Capture tab and the
+fullscreen Graphics menu both expose the resolution mode and custom dimensions
+(`ScreenshotSize`, `ScreenshotWidth`, and `ScreenshotHeight` in `[EmuCore/GS]`).
+
 A save state's GS dump records the 4 frames after the save, so it is written
 only once those frames run. Saving to a slot then shows "Saved GS dump to slot
 N." when the dump is written, "Failed to save GS dump to slot N." when writing

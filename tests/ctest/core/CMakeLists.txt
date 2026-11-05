@@ -14,6 +14,7 @@ add_pcsx2_test(core_test
 	pine_agent_control_tests.cpp
 	pine_replay_analysis_tests.cpp
 	patch_tests.cpp
+	screenshot_tests.cpp
 	MockMemoryInterface.h
 	StubHost.cpp
 )

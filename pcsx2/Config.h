@@ -364,6 +364,7 @@ enum class GSScreenshotSize : u8
 	WindowResolution,
 	InternalResolution,
 	InternalResolutionUncorrected,
+	CustomResolution,
 };
 
 enum class GSScreenshotFormat : u8
@@ -718,6 +719,9 @@ struct Pcsx2Config
 		static constexpr OsdOverlayPos DEFAULT_OSD_PERFORMANCE_POS = OsdOverlayPos::TopRight;
 
 		static constexpr int DEFAULT_VIDEO_CAPTURE_BITRATE = 6000;
+		static constexpr int DEFAULT_SCREENSHOT_WIDTH = 1000;
+		static constexpr int DEFAULT_SCREENSHOT_HEIGHT = 750;
+		static constexpr int MAX_SCREENSHOT_DIMENSION = 16384;
 		static constexpr int DEFAULT_VIDEO_CAPTURE_WIDTH = 640;
 		static constexpr int DEFAULT_VIDEO_CAPTURE_HEIGHT = 480;
 		static constexpr int DEFAULT_AUDIO_CAPTURE_BITRATE = 192;
@@ -899,7 +903,9 @@ struct Pcsx2Config
 		int SaveFrameBy = 1;
 
 		s8 ExclusiveFullscreenControl = -1;
-		GSScreenshotSize ScreenshotSize = GSScreenshotSize::WindowResolution;
+		GSScreenshotSize ScreenshotSize = GSScreenshotSize::CustomResolution;
+		int ScreenshotWidth = DEFAULT_SCREENSHOT_WIDTH;
+		int ScreenshotHeight = DEFAULT_SCREENSHOT_HEIGHT;
 		GSScreenshotFormat ScreenshotFormat = GSScreenshotFormat::PNG;
 		int ScreenshotQuality = 90;
 

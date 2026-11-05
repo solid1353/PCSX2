@@ -756,12 +756,9 @@ std::unique_ptr<SaveStateEntryList> SaveState_DownloadState(Error* error)
 
 std::unique_ptr<SaveStateScreenshotData> SaveState_SaveScreenshot()
 {
-	static constexpr u32 SCREENSHOT_WIDTH = 640;
-	static constexpr u32 SCREENSHOT_HEIGHT = 480;
-
 	u32 width, height;
 	std::vector<u32> pixels;
-	if (!MTGS::SaveMemorySnapshot(SCREENSHOT_WIDTH, SCREENSHOT_HEIGHT, true, false, &width, &height, &pixels))
+	if (!MTGS::SaveMemorySnapshot(&width, &height, &pixels))
 	{
 		// saving failed for some reason, device lost?
 		return nullptr;

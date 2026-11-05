@@ -19,6 +19,7 @@ private:
 	u64 m_shader_time_start = 0;
 
 	std::string m_snapshot;
+	std::string m_dump_filename;
 	u32 m_dump_frames = 0;
 	u32 m_skipped_duplicate_frames = 0;
 

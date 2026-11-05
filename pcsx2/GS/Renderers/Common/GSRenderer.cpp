@@ -763,21 +763,21 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 			std::string_view compression_str;
 			if (GSConfig.GSDumpCompression == GSDumpCompressionMethod::Uncompressed)
 			{
-				m_dump = GSDumpBase::CreateUncompressedDump(m_snapshot, VMManager::GetDiscSerial(),
+				m_dump = GSDumpBase::CreateUncompressedDump(m_dump_filename, VMManager::GetDiscSerial(),
 					VMManager::GetDiscCRC(), screenshot_width, screenshot_height,
 					screenshot_pixels.empty() ? nullptr : screenshot_pixels.data(), fd, m_regs);
 				compression_str = TRANSLATE_SV("GS", "with no compression");
 			}
 			else if (GSConfig.GSDumpCompression == GSDumpCompressionMethod::LZMA)
 			{
-				m_dump = GSDumpBase::CreateXzDump(m_snapshot, VMManager::GetDiscSerial(),
+				m_dump = GSDumpBase::CreateXzDump(m_dump_filename, VMManager::GetDiscSerial(),
 					VMManager::GetDiscCRC(), screenshot_width, screenshot_height,
 					screenshot_pixels.empty() ? nullptr : screenshot_pixels.data(), fd, m_regs);
 				compression_str = TRANSLATE_SV("GS", "with LZMA compression");
 			}
 			else
 			{
-				m_dump = GSDumpBase::CreateZstDump(m_snapshot, VMManager::GetDiscSerial(),
+				m_dump = GSDumpBase::CreateZstDump(m_dump_filename, VMManager::GetDiscSerial(),
 					VMManager::GetDiscCRC(), screenshot_width, screenshot_height,
 					screenshot_pixels.empty() ? nullptr : screenshot_pixels.data(), fd, m_regs);
 				compression_str = TRANSLATE_SV("GS", "with Zstandard compression");
@@ -849,16 +849,23 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 		DumpTransferImages();
 }
 
+static std::string GSGetSnapshotDirectory(const std::string& root);
+
 void GSRenderer::QueueSnapshot(const std::string& path, const u32 gsdump_frames)
 {
 	if (!m_snapshot.empty())
 		return;
 
 	// Allows for providing a complete path
-	if (path.size() > 4 && StringUtil::EndsWithNoCase(path, ".png"))
+	const bool explicit_path = (path.size() > 4 && StringUtil::EndsWithNoCase(path, ".png"));
+	if (explicit_path)
 		m_snapshot = path.substr(0, path.size() - 4);
 	else
 		m_snapshot = GSGetBaseSnapshotFilename();
+	m_dump_filename.clear();
+	if (gsdump_frames > 0)
+		m_dump_filename = explicit_path ? m_snapshot :
+			Path::Combine(GSGetSnapshotDirectory(EmuFolders::GSDumps), Path::GetFileName(m_snapshot));
 
 	m_dump_frames = gsdump_frames;
 	if (gsdump_frames == 0 && VMManager::GetState() == VMState::Paused)
@@ -879,6 +886,7 @@ void GSRenderer::SaveScreenshot()
 			TRANSLATE_SV("GS", "Failed to render/download screenshot."), Host::OSD_ERROR_DURATION);
 	}
 	m_snapshot.clear();
+	m_dump_filename.clear();
 }
 
 void GSRenderer::QueueSavestateGSDump(std::function<void(std::vector<u8>)> data_callback)
@@ -947,7 +955,7 @@ static std::string GSGetBaseFilename()
 	return filename;
 }
 
-std::string GSGetBaseSnapshotFilename()
+static std::string GSGetSnapshotDirectory(const std::string& root)
 {
 	// If organize by game is enabled, use or create a game-specific folder.
 	if (GSConfig.OrganizeSnapshotsByGame)
@@ -957,15 +965,20 @@ std::string GSGetBaseSnapshotFilename()
 		if (!game_name.empty())
 		{
 			Path::SanitizeFileName(&game_name);
-			const std::string game_dir = Path::Combine(EmuFolders::Snapshots, game_name);
+			const std::string game_dir = Path::Combine(root, game_name);
 
 			// Make sure the per-game directory exists or that we can successfully create it.
 			if (FileSystem::DirectoryExists(game_dir.c_str()) || FileSystem::CreateDirectoryPath(game_dir.c_str(), false))
-				return Path::Combine(game_dir, GSGetBaseFilename());
+				return game_dir;
 		}
 	}
 
-	return Path::Combine(EmuFolders::Snapshots, GSGetBaseFilename());
+	return root;
+}
+
+std::string GSGetBaseSnapshotFilename()
+{
+	return Path::Combine(GSGetSnapshotDirectory(EmuFolders::Snapshots), GSGetBaseFilename());
 }
 
 std::string GSGetBaseVideoFilename()
@@ -992,6 +1005,7 @@ std::string GSGetBaseVideoFilename()
 void GSRenderer::StopGSDump()
 {
 	m_snapshot = {};
+	m_dump_filename.clear();
 	m_dump_frames = 0;
 }
 

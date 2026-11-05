@@ -28,18 +28,24 @@ The save state selector closes 2 seconds after the last slot change instead of
 nor its release reaches any hotkey or pad binding
 (`pcsx2/ImGui/ImGuiManager.cpp`).
 
-Screenshot Resolution in Graphics settings controls ordinary screenshots,
-replay captures, input-recording captures, and hotkey GS dump previews. Custom Resolution
+Screenshot Resolution in Graphics settings controls ordinary screenshots
+and hotkey GS dump previews. Custom Resolution
 uses the configured width and height, initially 1000 x 750, with padding when
 needed to preserve the aspect ratio. The desktop Media Capture tab and the
 fullscreen Graphics menu both expose the resolution mode and custom dimensions
 (`ScreenshotSize`, `ScreenshotWidth`, and `ScreenshotHeight` in `[EmuCore/GS]`).
-Save state screenshots and their GS dump previews use a fixed 640 x 480 image
-independently of those settings, with their original PNG compression level 5.
+Save state screenshots, their GS dump previews, replay captures, and
+input-recording captures use a fixed 640 x 480 image independently of those
+settings, with their original PNG compression level 5.
 PNG Compression uses levels 0-9 (default 9), while JPEG Quality and WebP Quality
 use 1-100% (default 100%). Each format remembers its own value in
 `ScreenshotPNGCompression`, `ScreenshotJPEGQuality`, or `ScreenshotWebPQuality`.
 Ordinary screenshots save the current frame immediately while paused.
+
+Standalone GS dumps use the `[Folders]` `GSDumps` directory, defaulting to
+`gs_dumps` beneath the data root. Their companion screenshots use `Snapshots`.
+Explicit capture paths select their requested destination. Emulated USB
+printer output uses `Prints`, defaulting to `prints` beneath the data root.
 
 Hotkey INI sections follow the UI categories, such as `[Hotkeys/System]`,
 `[Hotkeys/Graphics]`, and `[Hotkeys/Save States]`. Input loading, both settings

@@ -156,6 +156,8 @@ namespace EmuFolders
 	std::string DebuggerSettings;
 	std::string Bios;
 	std::string Snapshots;
+	std::string GSDumps;
+	std::string Prints;
 	std::string Savestates;
 	std::string MemoryCards;
 	std::string Logs;
@@ -2282,6 +2284,8 @@ void EmuFolders::SetDefaults(SettingsInterface& si)
 {
 	si.SetStringValue("Folders", "Bios", "bios");
 	si.SetStringValue("Folders", "Snapshots", "snaps");
+	si.SetStringValue("Folders", "GSDumps", "gs_dumps");
+	si.SetStringValue("Folders", "Prints", "prints");
 	si.SetStringValue("Folders", "Savestates", "sstates");
 	si.SetStringValue("Folders", "MemoryCards", "memcards");
 	si.SetStringValue("Folders", "Logs", "logs");
@@ -2412,6 +2416,8 @@ void EmuFolders::LoadConfig(SettingsInterface& si)
 {
 	Bios = LoadPathFromSettings(si, DataRoot, "Bios", "bios");
 	Snapshots = LoadPathFromSettings(si, DataRoot, "Snapshots", "snaps");
+	GSDumps = LoadPathFromSettings(si, DataRoot, "GSDumps", "gs_dumps");
+	Prints = LoadPathFromSettings(si, DataRoot, "Prints", "prints");
 	Savestates = LoadPathFromSettings(si, DataRoot, "Savestates", "sstates");
 	MemoryCards = LoadPathFromSettings(si, DataRoot, "MemoryCards", "memcards");
 	Logs = LoadPathFromSettings(si, DataRoot, "Logs", "logs");
@@ -2446,6 +2452,8 @@ void EmuFolders::LoadConfig(SettingsInterface& si)
 
 	Console.WriteLn("BIOS Directory: %s", Bios.c_str());
 	Console.WriteLn("Snapshots Directory: %s", Snapshots.c_str());
+	Console.WriteLn("GS Dumps Directory: %s", GSDumps.c_str());
+	Console.WriteLn("Printer Output Directory: %s", Prints.c_str());
 	Console.WriteLn("Savestates Directory: %s", Savestates.c_str());
 	Console.WriteLn("MemoryCards Directory: %s", MemoryCards.c_str());
 	Console.WriteLn("Logs Directory: %s", Logs.c_str());
@@ -2471,6 +2479,8 @@ bool EmuFolders::EnsureFoldersExist()
 	bool result = FileSystem::CreateDirectoryPath(Bios.c_str(), false);
 	result = FileSystem::CreateDirectoryPath(Settings.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(Snapshots.c_str(), false) && result;
+	result = FileSystem::CreateDirectoryPath(GSDumps.c_str(), false) && result;
+	result = FileSystem::CreateDirectoryPath(Prints.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(Savestates.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(MemoryCards.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(Logs.c_str(), false) && result;

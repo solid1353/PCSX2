@@ -1432,6 +1432,8 @@ namespace EmuFolders
 	extern std::string Settings;
 	extern std::string Bios;
 	extern std::string Snapshots;
+	extern std::string GSDumps;
+	extern std::string Prints;
 	extern std::string Savestates;
 	extern std::string MemoryCards;
 	extern std::string Logs;

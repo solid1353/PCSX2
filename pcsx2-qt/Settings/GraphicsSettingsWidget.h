@@ -50,6 +50,7 @@ private Q_SLOTS:
 	void onEnableVideoCaptureArgumentsChanged();
 	void onVideoCaptureAutoResolutionChanged();
 	void onScreenshotSizeChanged();
+	void onScreenshotFormatChanged();
 	void onEnableAudioCaptureChanged();
 	void onEnableAudioCaptureArgumentsChanged();
 

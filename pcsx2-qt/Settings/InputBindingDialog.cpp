@@ -269,7 +269,7 @@ void InputBindingDialog::saveListToSettings()
 	{
 		if (!m_bindings_settings.empty())
 			m_sif->SetStringList(m_section_name.c_str(), m_key_name.c_str(), m_bindings_settings);
-		else if (m_section_name == "Hotkeys")
+		else if (InputManager::IsHotkeyConfigSection(m_section_name))
 			m_sif->SetStringValue(m_section_name.c_str(), m_key_name.c_str(), "");
 		else
 			m_sif->DeleteValue(m_section_name.c_str(), m_key_name.c_str());
@@ -280,7 +280,7 @@ void InputBindingDialog::saveListToSettings()
 	{
 		if (!m_bindings_settings.empty())
 			Host::SetBaseStringListSettingValue(m_section_name.c_str(), m_key_name.c_str(), m_bindings_settings);
-		else if (m_section_name == "Hotkeys")
+		else if (InputManager::IsHotkeyConfigSection(m_section_name))
 			Host::SetBaseStringSettingValue(m_section_name.c_str(), m_key_name.c_str(), "");
 		else
 			Host::RemoveBaseSettingValue(m_section_name.c_str(), m_key_name.c_str());

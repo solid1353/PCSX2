@@ -29,11 +29,34 @@ nor its release reaches any hotkey or pad binding
 (`pcsx2/ImGui/ImGuiManager.cpp`).
 
 Screenshot Resolution in Graphics settings controls ordinary screenshots,
-save state screenshots, replay captures, and GS dump previews. Custom Resolution
+replay captures, input-recording captures, and hotkey GS dump previews. Custom Resolution
 uses the configured width and height, initially 1000 x 750, with padding when
 needed to preserve the aspect ratio. The desktop Media Capture tab and the
 fullscreen Graphics menu both expose the resolution mode and custom dimensions
 (`ScreenshotSize`, `ScreenshotWidth`, and `ScreenshotHeight` in `[EmuCore/GS]`).
+Save state screenshots and their GS dump previews use a fixed 640 x 480 image
+independently of those settings, with their original PNG compression level 5.
+PNG Compression uses levels 0-9 (default 9), while JPEG Quality and WebP Quality
+use 1-100% (default 100%). Each format remembers its own value in
+`ScreenshotPNGCompression`, `ScreenshotJPEGQuality`, or `ScreenshotWebPQuality`.
+Ordinary screenshots save the current frame immediately while paused.
+
+Hotkey INI sections follow the UI categories, such as `[Hotkeys/System]`,
+`[Hotkeys/Graphics]`, and `[Hotkeys/Save States]`. Input loading, both settings
+menus, profile copying, and the save state selector read the same category
+section for each hotkey.
+
+The Windows dependency recipe installs pinned zlib-ng 2.3.3 as `z.dll` after
+building the zlib headers and import library. This supplies the faster backend
+used by libpng; the other Windows zlib consumers share that runtime.
+
+`tools/benchmark_png.ps1` compares two Windows zlib DLLs through the same libpng
+encoder at compression level 9 and validates every decoded pixel. Compile its
+`tools/png_benchmark.cpp` harness with the existing x64 MSVC toolchain,
+`/O2 /std:c++20 /EHsc /MD /DNDEBUG`, and the dependency PNG headers. Pass its
+executable, the PNG DLL, image, baseline DLL, and candidate DLL to the runner.
+It writes raw measurements under `UN_TASK_WORK_ROOT`, uses its existing
+`inputs/` directory, and removes its copied DLLs and input afterward.
 
 A save state's GS dump records the 4 frames after the save, so it is written
 only once those frames run. Saving to a slot then shows "Saved GS dump to slot

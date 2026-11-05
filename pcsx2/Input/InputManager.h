@@ -235,6 +235,8 @@ namespace InputManager
 	/// Returns a list of all hotkeys.
 	std::vector<const HotkeyInfo*> GetHotkeyList();
 	const HotkeyInfo* GetHotkeyInfo(std::string_view name);
+	std::string GetHotkeyConfigSection(const HotkeyInfo& hotkey);
+	bool IsHotkeyConfigSection(std::string_view section);
 	std::vector<std::string> GetHotkeyBindings(SettingsInterface& si, const HotkeyInfo& hotkey);
 
 	/// Enumerates available devices. Returns a pair of the prefix (e.g. SDL-0) and the device name.

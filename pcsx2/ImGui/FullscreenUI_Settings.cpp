@@ -331,7 +331,7 @@ void FullscreenUI::DrawInputBindingButton(
 	}
 	else if (hovered && (ImGui::IsItemClicked(ImGuiMouseButton_Right) || ImGui::Shortcut(ImGuiKey_NavGamepadMenu)))
 	{
-		if (std::strcmp(section, "Hotkeys") == 0)
+		if (InputManager::IsHotkeyConfigSection(section))
 			bsi->SetStringValue(section, name, "");
 		else
 			bsi->DeleteValue(section, name);
@@ -3134,8 +3134,26 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 	DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_PHOTO_FILM, "Screenshot Format"), FSUI_CSTR("Selects the format which will be used to save screenshots."),
 		"EmuCore/GS", "ScreenshotFormat", static_cast<int>(GSScreenshotFormat::PNG), s_screenshot_formats, std::size(s_screenshot_formats),
 		true);
-	DrawIntRangeSetting(bsi, FSUI_ICONSTR(ICON_FA_GAUGE, "Screenshot Quality"), FSUI_CSTR("Selects the quality at which screenshots will be compressed."),
-		"EmuCore/GS", "ScreenshotQuality", 90, 1, 100, FSUI_CSTR("%d%%"));
+	const auto screenshot_format = static_cast<GSScreenshotFormat>(GetEffectiveIntSetting(bsi, "EmuCore/GS", "ScreenshotFormat",
+		static_cast<int>(GSScreenshotFormat::PNG)));
+	if (screenshot_format == GSScreenshotFormat::PNG)
+	{
+		DrawIntRangeSetting(bsi, FSUI_ICONSTR(ICON_FA_GAUGE, "PNG Compression"),
+			FSUI_CSTR("PNG is always lossless. Level 0 disables compression; higher levels generally produce smaller files and take longer to encode."),
+			"EmuCore/GS", "ScreenshotPNGCompression", Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_PNG_COMPRESSION, 0, 9);
+	}
+	else if (screenshot_format == GSScreenshotFormat::JPEG)
+	{
+		DrawIntRangeSetting(bsi, FSUI_ICONSTR(ICON_FA_GAUGE, "JPEG Quality"),
+			FSUI_CSTR("Higher quality preserves more detail and generally produces larger files. JPEG remains lossy at 100%."),
+			"EmuCore/GS", "ScreenshotJPEGQuality", Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_QUALITY, 1, 100, FSUI_CSTR("%d%%"));
+	}
+	else
+	{
+		DrawIntRangeSetting(bsi, FSUI_ICONSTR(ICON_FA_GAUGE, "WebP Quality"),
+			FSUI_CSTR("Higher quality preserves more detail and generally produces larger files. WebP remains lossy at 100%."),
+			"EmuCore/GS", "ScreenshotWebPQuality", Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_QUALITY, 1, 100, FSUI_CSTR("%d%%"));
+	}
 	DrawIntRangeSetting(bsi, FSUI_ICONSTR(ICON_FA_ARROW_RIGHT_ARROW_LEFT, "Vertical Stretch"), FSUI_CSTR("Increases or decreases the virtual picture size vertically."),
 		"EmuCore/GS", "StretchY", 100, 10, 300, FSUI_CSTR("%d%%"));
 	DrawIntRectSetting(bsi, FSUI_ICONSTR(ICON_FA_CROP, "Crop"), FSUI_CSTR("Crops the image, while respecting aspect ratio."), "EmuCore/GS", "CropLeft", 0,
@@ -5586,7 +5604,8 @@ void FullscreenUI::DrawHotkeySettingsPage()
 		}
 
 		DrawInputBindingButton(
-			bsi, InputBindingInfo::Type::Button, "Hotkeys", hotkey->name, Host::TranslateToCString("Hotkeys", hotkey->display_name), nullptr, false);
+			bsi, InputBindingInfo::Type::Button, InputManager::GetHotkeyConfigSection(*hotkey).c_str(), hotkey->name,
+			Host::TranslateToCString("Hotkeys", hotkey->display_name), nullptr, false);
 	}
 
 	EndMenuButtons();
@@ -6063,7 +6082,9 @@ TRANSLATE_NOOP("FullscreenUI", "Selects the aspect ratio for display when a FMV 
 TRANSLATE_NOOP("FullscreenUI", "Selects the algorithm used to convert the PS2's interlaced output to progressive for display.");
 TRANSLATE_NOOP("FullscreenUI", "Disables interlacing offset which may reduce blurring in some situations.");
 TRANSLATE_NOOP("FullscreenUI", "Selects the format which will be used to save screenshots.");
-TRANSLATE_NOOP("FullscreenUI", "Selects the quality at which screenshots will be compressed.");
+TRANSLATE_NOOP("FullscreenUI", "PNG is always lossless. Level 0 disables compression; higher levels generally produce smaller files and take longer to encode.");
+TRANSLATE_NOOP("FullscreenUI", "Higher quality preserves more detail and generally produces larger files. JPEG remains lossy at 100%.");
+TRANSLATE_NOOP("FullscreenUI", "Higher quality preserves more detail and generally produces larger files. WebP remains lossy at 100%.");
 TRANSLATE_NOOP("FullscreenUI", "%d%%");
 TRANSLATE_NOOP("FullscreenUI", "Increases or decreases the virtual picture size vertically.");
 TRANSLATE_NOOP("FullscreenUI", "Crops the image, while respecting aspect ratio.");
@@ -6683,7 +6704,9 @@ TRANSLATE_NOOP("FullscreenUI", "Sets the resolution of all screenshots, includin
 TRANSLATE_NOOP("FullscreenUI", "Width in pixels of every screenshot when Custom Resolution is selected.");
 TRANSLATE_NOOP("FullscreenUI", "Height in pixels of every screenshot when Custom Resolution is selected.");
 TRANSLATE_NOOP("FullscreenUI", "Screenshot Format");
-TRANSLATE_NOOP("FullscreenUI", "Screenshot Quality");
+TRANSLATE_NOOP("FullscreenUI", "PNG Compression");
+TRANSLATE_NOOP("FullscreenUI", "JPEG Quality");
+TRANSLATE_NOOP("FullscreenUI", "WebP Quality");
 TRANSLATE_NOOP("FullscreenUI", "Vertical Stretch");
 TRANSLATE_NOOP("FullscreenUI", "Crop");
 TRANSLATE_NOOP("FullscreenUI", "Apply Widescreen Patches");

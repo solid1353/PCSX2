@@ -289,6 +289,7 @@ ninja -C build install || goto error
 cd .. || goto error
 
 echo Building libpng...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPTDIR%\install-zlib-ng.ps1" -DependencyRoot "%INSTALLDIR%" || goto error
 rmdir /S /Q "lpng%LIBPNG%"
 %SEVENZIP% x "lpng%LIBPNG%.zip" || goto error
 rem apng not in released libpng yet

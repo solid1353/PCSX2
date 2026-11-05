@@ -1544,6 +1544,10 @@ void SaveStateSelectorUI::DestroyTextures()
 
 void SaveStateSelectorUI::RefreshHotkeyLegend()
 {
+	auto get_binding = [](const char* name) {
+		const HotkeyInfo* hotkey = InputManager::GetHotkeyInfo(name);
+		return Host::GetSmallStringSettingValue(InputManager::GetHotkeyConfigSection(*hotkey).c_str(), name);
+	};
 	auto format_legend_entry = [](SmallString binding, std::string_view caption) {
 		InputManager::PrettifyInputBinding(binding);
 		if (binding.empty())
@@ -1551,17 +1555,17 @@ void SaveStateSelectorUI::RefreshHotkeyLegend()
 		return fmt::format("{} - {}", binding, caption);
 	};
 
-	s_load_legend = format_legend_entry(Host::GetSmallStringSettingValue("Hotkeys", "LoadStateFromSlot"),
+	s_load_legend = format_legend_entry(get_binding("LoadStateFromSlot"),
 		TRANSLATE_STR("ImGuiOverlays", "Load"));
-	s_save_legend = format_legend_entry(Host::GetSmallStringSettingValue("Hotkeys", "SaveStateToSlot"),
+	s_save_legend = format_legend_entry(get_binding("SaveStateToSlot"),
 		TRANSLATE_STR("ImGuiOverlays", "Save"));
-	s_delete_legend = format_legend_entry(Host::GetSmallStringSettingValue("Hotkeys", "DeleteStateFromSlot"),
+	s_delete_legend = format_legend_entry(get_binding("DeleteStateFromSlot"),
 		TRANSLATE_STR("ImGuiOverlays", "Delete"));
-	s_prev_legend = format_legend_entry(Host::GetSmallStringSettingValue("Hotkeys", "PreviousSaveStateSlot"),
+	s_prev_legend = format_legend_entry(get_binding("PreviousSaveStateSlot"),
 		TRANSLATE_STR("ImGuiOverlays", "Select Previous"));
-	s_next_legend = format_legend_entry(Host::GetSmallStringSettingValue("Hotkeys", "NextSaveStateSlot"),
+	s_next_legend = format_legend_entry(get_binding("NextSaveStateSlot"),
 		TRANSLATE_STR("ImGuiOverlays", "Select Next"));
-	s_close_legend = format_legend_entry(Host::GetSmallStringSettingValue("Hotkeys", "OpenPauseMenu"),
+	s_close_legend = format_legend_entry(get_binding("OpenPauseMenu"),
 		TRANSLATE_STR("ImGuiOverlays", "Close Menu"));
 }
 

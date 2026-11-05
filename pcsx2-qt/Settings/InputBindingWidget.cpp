@@ -244,7 +244,7 @@ void InputBindingWidget::clearBinding()
 {
 	if (m_sif)
 	{
-		if (m_section_name == "Hotkeys")
+		if (InputManager::IsHotkeyConfigSection(m_section_name))
 			m_sif->SetStringValue(m_section_name.c_str(), m_key_name.c_str(), "");
 		else
 			m_sif->DeleteValue(m_section_name.c_str(), m_key_name.c_str());
@@ -253,7 +253,7 @@ void InputBindingWidget::clearBinding()
 	}
 	else
 	{
-		if (m_section_name == "Hotkeys")
+		if (InputManager::IsHotkeyConfigSection(m_section_name))
 			Host::SetBaseStringSettingValue(m_section_name.c_str(), m_key_name.c_str(), "");
 		else
 			Host::RemoveBaseSettingValue(m_section_name.c_str(), m_key_name.c_str());
@@ -265,7 +265,7 @@ void InputBindingWidget::clearBinding()
 
 void InputBindingWidget::reloadBinding()
 {
-	const HotkeyInfo* hotkey = m_section_name == "Hotkeys" ? InputManager::GetHotkeyInfo(m_key_name) : nullptr;
+	const HotkeyInfo* hotkey = InputManager::IsHotkeyConfigSection(m_section_name) ? InputManager::GetHotkeyInfo(m_key_name) : nullptr;
 	if (hotkey)
 	{
 		auto lock = Host::GetSettingsLock();

@@ -18,16 +18,34 @@ TEST(HotkeyBindings, ActiveBindingsComeOnlyFromSettings)
 {
 	MemorySettingsInterface settings;
 	const HotkeyInfo hotkey{"Example", "Game List", "Example", nullptr, "Keyboard/Control & Keyboard/R"};
+	const std::string section = InputManager::GetHotkeyConfigSection(hotkey);
 	EXPECT_TRUE(InputManager::GetHotkeyBindings(settings, hotkey).empty());
-	EXPECT_FALSE(settings.ContainsValue("Hotkeys", "Example"));
+	EXPECT_EQ(section, "Hotkeys/Game List");
+	EXPECT_FALSE(settings.ContainsValue(section.c_str(), "Example"));
 
-	settings.SetStringValue("Hotkeys", "Example", "Keyboard/F7");
+	settings.SetStringValue(section.c_str(), "Example", "Keyboard/F7");
 	EXPECT_EQ(InputManager::GetHotkeyBindings(settings, hotkey), (std::vector<std::string>{"Keyboard/F7"}));
 
-	settings.SetStringValue("Hotkeys", "Example", "");
+	settings.SetStringValue(section.c_str(), "Example", "");
 	EXPECT_TRUE(InputManager::GetHotkeyBindings(settings, hotkey).empty());
-	settings.DeleteValue("Hotkeys", "Example");
+	settings.DeleteValue(section.c_str(), "Example");
 	EXPECT_TRUE(InputManager::GetHotkeyBindings(settings, hotkey).empty());
+}
+
+TEST(HotkeyBindings, DefaultsAndProfileCopyUseCategorySections)
+{
+	MemorySettingsInterface source;
+	MemorySettingsInterface destination;
+	Pad::SetDefaultHotkeyConfig(source);
+	const HotkeyInfo* pause = InputManager::GetHotkeyInfo("TogglePause");
+	ASSERT_NE(pause, nullptr);
+	const std::string section = InputManager::GetHotkeyConfigSection(*pause);
+	EXPECT_EQ(section, "Hotkeys/Speed");
+	EXPECT_EQ(InputManager::GetHotkeyBindings(source, *pause), (std::vector<std::string>{"Keyboard/Space"}));
+	const std::vector<std::string> bindings = {"Keyboard/Space", "SDL-0/Touchpad"};
+	source.SetStringList(section.c_str(), pause->name, bindings);
+	Pad::CopyConfiguration(&destination, source, false, false, true);
+	EXPECT_EQ(InputManager::GetHotkeyBindings(destination, *pause), bindings);
 }
 
 namespace
@@ -98,7 +116,8 @@ namespace
 		void ConfigureBindings() override
 		{
 			m_settings.SetStringList("Pad1", "Up", {"Pointer-0/Button0"});
-			m_settings.SetStringList("Hotkeys", "HoldTurbo", {"Pointer-0/Button1 & Pointer-0/Button0"});
+			m_settings.SetStringList(InputManager::GetHotkeyConfigSection(*InputManager::GetHotkeyInfo("HoldTurbo")).c_str(),
+				"HoldTurbo", {"Pointer-0/Button1 & Pointer-0/Button0"});
 		}
 	};
 

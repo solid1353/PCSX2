@@ -157,7 +157,8 @@ Pad::ControllerType Pad::GetDefaultPadType(u32 pad)
 void Pad::SetDefaultControllerConfig(SettingsInterface& si)
 {
 	si.ClearSection("InputSources");
-	si.ClearSection("Hotkeys");
+	for (const HotkeyInfo* hotkey : InputManager::GetHotkeyList())
+		si.ClearSection(InputManager::GetHotkeyConfigSection(*hotkey).c_str());
 	si.ClearSection("Pad");
 
 	// PCSX2 Controller Settings - Global Settings
@@ -215,57 +216,36 @@ void Pad::SetDefaultControllerConfig(SettingsInterface& si)
 
 void Pad::SetDefaultHotkeyConfig(SettingsInterface& si)
 {
+	auto set_binding = [&si](const char* name, const char* binding) {
+		const HotkeyInfo* hotkey = InputManager::GetHotkeyInfo(name);
+		pxAssert(hotkey);
+		si.SetStringValue(InputManager::GetHotkeyConfigSection(*hotkey).c_str(), name, binding);
+	};
+
 	for (const HotkeyInfo* hotkey : InputManager::GetHotkeyList())
 	{
 		if (hotkey->default_binding)
-			si.SetStringValue("Hotkeys", hotkey->name, hotkey->default_binding);
+			si.SetStringValue(InputManager::GetHotkeyConfigSection(*hotkey).c_str(), hotkey->name, hotkey->default_binding);
 	}
-
-	// PCSX2 Controller Settings - Hotkeys
-
-	// PCSX2 Controller Settings - Hotkeys - General
-	si.SetStringValue("Hotkeys", "ToggleFullscreen", "Keyboard/Alt & Keyboard/Return");
-
-	// PCSX2 Controller Settings - Hotkeys - Graphics
-	si.SetStringValue("Hotkeys", "CycleAspectRatio", "Keyboard/F6");
-	si.SetStringValue("Hotkeys", "CycleInterlaceMode", "Keyboard/F5");
-	// si.SetStringValue("Hotkeys", "CycleTVShader", "Keyboard/"); TBD
-	// si.SetStringValue("Hotkeys", "CycleBlendingAccuracy", "Keyboard/"); TBD
-	si.SetStringValue("Hotkeys", "ToggleMipmapMode", "Keyboard/Insert");
-	//	si.SetStringValue("Hotkeys", "DecreaseUpscaleMultiplier", "Keyboard"); TBD
-	//	si.SetStringValue("Hotkeys", "IncreaseUpscaleMultiplier", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "ReloadTextureReplacements", "Keyboard"); TBD
-	si.SetStringValue("Hotkeys", "GSDumpMultiFrame", "Keyboard/Control & Keyboard/Shift & Keyboard/F8");
-	si.SetStringValue("Hotkeys", "Screenshot", "Keyboard/F8");
-	si.SetStringValue("Hotkeys", "GSDumpSingleFrame", "Keyboard/Shift & Keyboard/F8");
-	si.SetStringValue("Hotkeys", "ToggleSoftwareRendering", "Keyboard/F9");
-	//  si.SetStringValue("Hotkeys", "ToggleTextureDumping", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "ToggleTextureReplacements", "Keyboard"); TBD
-	si.SetStringValue("Hotkeys", "ZoomIn", "Keyboard/Control & Keyboard/Plus");
-	si.SetStringValue("Hotkeys", "ZoomOut", "Keyboard/Control & Keyboard/Minus");
-	// Missing hotkey for resetting zoom back to 100 with Keyboard/Control & Keyboard/Asterisk
-
-	// PCSX2 Controller Settings - Hotkeys - Input Recording
-	si.SetStringValue("Hotkeys", "InputRecToggleMode", "Keyboard/Shift & Keyboard/R");
-
-	// PCSX2 Controller Settings - Hotkeys - Save States
-	si.SetStringValue("Hotkeys", "LoadStateFromSlot", "Keyboard/F3");
-	si.SetStringValue("Hotkeys", "SaveStateToSlot", "Keyboard/F1");
-	si.SetStringValue("Hotkeys", "NextSaveStateSlot", "Keyboard/F2");
-	si.SetStringValue("Hotkeys", "PreviousSaveStateSlot", "Keyboard/Shift & Keyboard/F2");
-
-	// PCSX2 Controller Settings - Hotkeys - System
-	//	si.SetStringValue("Hotkeys", "DecreaseSpeed", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "FrameAdvance", "Keyboard"); TBD
-	//	si.SetStringValue("Hotkeys", "IncreaseSpeed", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "ResetVM", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "ShutdownVM", "Keyboard"); TBD
-	si.SetStringValue("Hotkeys", "OpenPauseMenu", "Keyboard/Escape");
-	si.SetStringValue("Hotkeys", "ToggleFrameLimit", "Keyboard/F4");
-	si.SetStringValue("Hotkeys", "TogglePause", "Keyboard/Space");
-	si.SetStringValue("Hotkeys", "ToggleSlowMotion", "Keyboard/Shift & Keyboard/Backtab");
-	si.SetStringValue("Hotkeys", "ToggleTurbo", "Keyboard/Tab");
-	si.SetStringValue("Hotkeys", "HoldTurbo", "Keyboard/Period");
+	set_binding("ToggleFullscreen", "Keyboard/Alt & Keyboard/Return");
+	set_binding("CycleAspectRatio", "Keyboard/F6");
+	set_binding("CycleInterlaceMode", "Keyboard/F5");
+	set_binding("ToggleMipmapMode", "Keyboard/Insert");
+	set_binding("GSDumpMultiFrame", "Keyboard/Control & Keyboard/Shift & Keyboard/F8");
+	set_binding("Screenshot", "Keyboard/F8");
+	set_binding("GSDumpSingleFrame", "Keyboard/Shift & Keyboard/F8");
+	set_binding("ToggleSoftwareRendering", "Keyboard/F9");
+	set_binding("InputRecToggleMode", "Keyboard/Shift & Keyboard/R");
+	set_binding("LoadStateFromSlot", "Keyboard/F3");
+	set_binding("SaveStateToSlot", "Keyboard/F1");
+	set_binding("NextSaveStateSlot", "Keyboard/F2");
+	set_binding("PreviousSaveStateSlot", "Keyboard/Shift & Keyboard/F2");
+	set_binding("OpenPauseMenu", "Keyboard/Escape");
+	set_binding("ToggleFrameLimit", "Keyboard/F4");
+	set_binding("TogglePause", "Keyboard/Space");
+	set_binding("ToggleSlowMotion", "Keyboard/Shift & Keyboard/Backtab");
+	set_binding("ToggleTurbo", "Keyboard/Tab");
+	set_binding("HoldTurbo", "Keyboard/Period");
 }
 
 static const Pad::ControllerInfo* s_controller_info[] = {
@@ -419,7 +399,7 @@ void Pad::CopyConfiguration(SettingsInterface* dest_si, const SettingsInterface&
 	{
 		std::vector<const HotkeyInfo*> hotkeys(InputManager::GetHotkeyList());
 		for (const HotkeyInfo* hki : hotkeys)
-			dest_si->CopyStringListValue(src_si, "Hotkeys", hki->name);
+			dest_si->CopyStringListValue(src_si, InputManager::GetHotkeyConfigSection(*hki).c_str(), hki->name);
 	}
 }
 

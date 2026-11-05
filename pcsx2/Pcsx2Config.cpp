@@ -884,7 +884,9 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 		OpEqu(ScreenshotWidth) &&
 		OpEqu(ScreenshotHeight) &&
 		OpEqu(ScreenshotFormat) &&
-		OpEqu(ScreenshotQuality) &&
+		OpEqu(ScreenshotPNGCompression) &&
+		OpEqu(ScreenshotJPEGQuality) &&
+		OpEqu(ScreenshotWebPQuality) &&
 
 		OpEqu(CaptureContainer) &&
 		OpEqu(VideoCaptureCodec) &&
@@ -948,7 +950,12 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	ScreenshotWidth = std::clamp(ScreenshotWidth, 1, MAX_SCREENSHOT_DIMENSION);
 	ScreenshotHeight = std::clamp(ScreenshotHeight, 1, MAX_SCREENSHOT_DIMENSION);
 	SettingsWrapIntEnumEx(ScreenshotFormat, "ScreenshotFormat");
-	SettingsWrapEntry(ScreenshotQuality);
+	SettingsWrapEntry(ScreenshotPNGCompression);
+	SettingsWrapEntry(ScreenshotJPEGQuality);
+	SettingsWrapEntry(ScreenshotWebPQuality);
+	ScreenshotPNGCompression = std::clamp(ScreenshotPNGCompression, 0, 9);
+	ScreenshotJPEGQuality = std::clamp(ScreenshotJPEGQuality, 1, 100);
+	ScreenshotWebPQuality = std::clamp(ScreenshotWebPQuality, 1, 100);
 	SettingsWrapBitBoolEx(OrganizeSnapshotsByGame, "OrganizeScreenshotsByGame");
 	SettingsWrapBitBoolEx(OrganizeVideoCaptureByGame, "OrganizeVideoCaptureByGame");
 	SettingsWrapEntry(StretchY);

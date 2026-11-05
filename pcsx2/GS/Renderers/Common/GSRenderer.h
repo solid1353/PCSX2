@@ -14,6 +14,7 @@ private:
 	bool Merge(int field);
 	bool BeginPresentFrame(bool frame_skip);
 	void EndPresentFrame();
+	void SaveScreenshot();
 
 	u64 m_shader_time_start = 0;
 
@@ -53,6 +54,8 @@ public:
 	bool IsIdleFrame() const;
 
 	bool SaveSnapshotToMemory(u32* width, u32* height, std::vector<u32>* pixels);
+	bool SaveSnapshotToMemory(u32 window_width, u32 window_height, bool apply_aspect, bool crop_borders,
+		u32* width, u32* height, std::vector<u32>* pixels);
 
 	void QueueSnapshot(const std::string& path, const u32 gsdump_frames);
 	void QueueSavestateGSDump(std::function<void(std::vector<u8>)> data_callback);

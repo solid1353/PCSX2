@@ -722,6 +722,8 @@ struct Pcsx2Config
 		static constexpr int DEFAULT_SCREENSHOT_WIDTH = 1000;
 		static constexpr int DEFAULT_SCREENSHOT_HEIGHT = 750;
 		static constexpr int MAX_SCREENSHOT_DIMENSION = 16384;
+		static constexpr int DEFAULT_SCREENSHOT_PNG_COMPRESSION = 9;
+		static constexpr int DEFAULT_SCREENSHOT_QUALITY = 100;
 		static constexpr int DEFAULT_VIDEO_CAPTURE_WIDTH = 640;
 		static constexpr int DEFAULT_VIDEO_CAPTURE_HEIGHT = 480;
 		static constexpr int DEFAULT_AUDIO_CAPTURE_BITRATE = 192;
@@ -907,7 +909,9 @@ struct Pcsx2Config
 		int ScreenshotWidth = DEFAULT_SCREENSHOT_WIDTH;
 		int ScreenshotHeight = DEFAULT_SCREENSHOT_HEIGHT;
 		GSScreenshotFormat ScreenshotFormat = GSScreenshotFormat::PNG;
-		int ScreenshotQuality = 90;
+		int ScreenshotPNGCompression = DEFAULT_SCREENSHOT_PNG_COMPRESSION;
+		int ScreenshotJPEGQuality = DEFAULT_SCREENSHOT_QUALITY;
+		int ScreenshotWebPQuality = DEFAULT_SCREENSHOT_QUALITY;
 
 		std::string CaptureContainer = DEFAULT_CAPTURE_CONTAINER;
 		std::string VideoCaptureCodec;

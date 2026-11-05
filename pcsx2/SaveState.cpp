@@ -758,7 +758,7 @@ std::unique_ptr<SaveStateScreenshotData> SaveState_SaveScreenshot()
 {
 	u32 width, height;
 	std::vector<u32> pixels;
-	if (!MTGS::SaveMemorySnapshot(&width, &height, &pixels))
+	if (!MTGS::SaveMemorySnapshot(640, 480, true, false, &width, &height, &pixels))
 	{
 		// saving failed for some reason, device lost?
 		return nullptr;
@@ -771,7 +771,7 @@ std::unique_ptr<SaveStateScreenshotData> SaveState_SaveScreenshot()
 	return data;
 }
 
-static bool SaveState_EncodeScreenshot(SaveStateScreenshotData* data, std::vector<u8>* encoded_png)
+static bool SaveState_EncodeScreenshot(SaveStateScreenshotData* data, std::vector<u8>* encoded_png, int compression_level = 5)
 {
 	png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
 	png_infop info_ptr = nullptr;
@@ -794,7 +794,7 @@ static bool SaveState_EncodeScreenshot(SaveStateScreenshotData* data, std::vecto
 	png_set_write_fn(png_ptr, encoded_png, [](png_structp png_ptr, png_bytep data_ptr, png_size_t size) {
 		auto* const output = static_cast<std::vector<u8>*>(png_get_io_ptr(png_ptr));
 		output->insert(output->end(), data_ptr, data_ptr + size); }, nullptr);
-	png_set_compression_level(png_ptr, 5);
+	png_set_compression_level(png_ptr, compression_level);
 	png_set_IHDR(png_ptr, info_ptr, data->width, data->height, 8, PNG_COLOR_TYPE_RGBA,
 		PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 	png_write_info(png_ptr, info_ptr);
@@ -816,15 +816,15 @@ static bool SaveState_EncodeScreenshot(SaveStateScreenshotData* data, std::vecto
 
 bool SaveState_SaveScreenshotToFile(const char* filename, Error* error)
 {
-	std::unique_ptr<SaveStateScreenshotData> screenshot = SaveState_SaveScreenshot();
-	if (!screenshot)
+	auto screenshot = std::make_unique<SaveStateScreenshotData>();
+	if (!MTGS::SaveMemorySnapshot(&screenshot->width, &screenshot->height, &screenshot->pixels))
 	{
 		Error::SetString(error, TRANSLATE_STR("SaveState", "Failed to capture save state screenshot."));
 		return false;
 	}
 
 	std::vector<u8> encoded_screenshot;
-	if (!SaveState_EncodeScreenshot(screenshot.get(), &encoded_screenshot))
+	if (!SaveState_EncodeScreenshot(screenshot.get(), &encoded_screenshot, EmuConfig.GS.ScreenshotPNGCompression))
 	{
 		Error::SetString(error, TRANSLATE_STR("SaveState", "Failed to encode save state screenshot."));
 		return false;

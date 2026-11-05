@@ -878,9 +878,19 @@ const HotkeyInfo* InputManager::GetHotkeyInfo(std::string_view name)
 
 std::vector<std::string> InputManager::GetHotkeyBindings(SettingsInterface& si, const HotkeyInfo& hotkey)
 {
-	std::vector<std::string> bindings = si.GetStringList("Hotkeys", hotkey.name);
+	std::vector<std::string> bindings = si.GetStringList(GetHotkeyConfigSection(hotkey).c_str(), hotkey.name);
 	std::erase(bindings, std::string());
 	return bindings;
+}
+
+std::string InputManager::GetHotkeyConfigSection(const HotkeyInfo& hotkey)
+{
+	return fmt::format("Hotkeys/{}", hotkey.category);
+}
+
+bool InputManager::IsHotkeyConfigSection(std::string_view section)
+{
+	return section.starts_with("Hotkeys/");
 }
 
 void InputManager::AddHotkeyBindings(SettingsInterface& si, bool is_profile)
@@ -897,7 +907,8 @@ void InputManager::AddHotkeyBindings(SettingsInterface& si, bool is_profile)
 			if (bindings.empty())
 				continue;
 
-			AddBindings(bindings, InputButtonEventHandler{hotkey->handler}, InputBindingInfo::Type::Button, si, "Hotkeys", hotkey->name, is_profile);
+			const std::string section = GetHotkeyConfigSection(*hotkey);
+			AddBindings(bindings, InputButtonEventHandler{hotkey->handler}, InputBindingInfo::Type::Button, si, section.c_str(), hotkey->name, is_profile);
 		}
 	}
 }

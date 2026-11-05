@@ -100,6 +100,14 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	onScreenshotSizeChanged();
 	SettingWidgetBinder::BindWidgetToIntSetting(
 		sif, m_capture.screenshotFormat, "EmuCore/GS", "ScreenshotFormat", static_cast<int>(GSScreenshotFormat::PNG));
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_capture.screenshotPNGCompression, "EmuCore/GS", "ScreenshotPNGCompression",
+		Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_PNG_COMPRESSION);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_capture.screenshotJPEGQuality, "EmuCore/GS", "ScreenshotJPEGQuality",
+		Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_QUALITY);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_capture.screenshotWebPQuality, "EmuCore/GS", "ScreenshotWebPQuality",
+		Pcsx2Config::GSOptions::DEFAULT_SCREENSHOT_QUALITY);
+	connect(m_capture.screenshotFormat, &QComboBox::currentIndexChanged, this, &GraphicsSettingsWidget::onScreenshotFormatChanged);
+	onScreenshotFormatChanged();
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_display.stretchY, "EmuCore/GS", "StretchY", 100.0f);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_display.cropLeft, "EmuCore/GS", "CropLeft", 0);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_display.cropTop, "EmuCore/GS", "CropTop", 0);
@@ -391,8 +399,6 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 		SettingWidgetBinder::BindWidgetToBoolSetting(
 			sif, m_capture.enableVideoCaptureArguments, "EmuCore/GS", "EnableVideoCaptureParameters", false);
 		SettingWidgetBinder::BindWidgetToStringSetting(sif, m_capture.videoCaptureArguments, "EmuCore/GS", "VideoCaptureParameters");
-		SettingWidgetBinder::BindWidgetToIntSetting(
-			sif, m_capture.screenshotQuality, "EmuCore/GS", "ScreenshotQuality", 90);
 		connect(m_capture.enableVideoCapture, &QCheckBox::checkStateChanged, this, &GraphicsSettingsWidget::onEnableVideoCaptureChanged);
 		connect(
 			m_capture.videoCaptureResolutionAuto, &QCheckBox::checkStateChanged, this, &GraphicsSettingsWidget::onVideoCaptureAutoResolutionChanged);
@@ -470,9 +476,12 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 		dialog()->registerWidgetHelp(m_capture.screenshotFormat, tr("Screenshot Format"), tr("PNG"),
 			tr("Selects the format which will be used to save screenshots. JPEG produces smaller files, but loses detail."));
 
-		dialog()->registerWidgetHelp(m_capture.screenshotQuality, tr("Screenshot Quality"), tr("90%"),
-			tr("Selects the quality at which screenshots will be compressed. Higher values preserve more detail for JPEG and WebP, and reduce file "
-			   "size for PNG."));
+		dialog()->registerWidgetHelp(m_capture.screenshotPNGCompression, tr("PNG Compression"), tr("9"),
+			tr("PNG is always lossless. Level 0 disables compression; higher levels generally produce smaller files and take longer to encode."));
+		dialog()->registerWidgetHelp(m_capture.screenshotJPEGQuality, tr("JPEG Quality"), tr("100%"),
+			tr("Higher quality preserves more detail and generally produces larger files. JPEG remains lossy at 100%."));
+		dialog()->registerWidgetHelp(m_capture.screenshotWebPQuality, tr("WebP Quality"), tr("100%"),
+			tr("Higher quality preserves more detail and generally produces larger files. WebP remains lossy at 100%."));
 
 		dialog()->registerWidgetHelp(m_display.stretchY, tr("Vertical Stretch"), tr("100%"),
 			// Characters </> need to be converted into entities in order to be shown correctly.
@@ -1280,6 +1289,12 @@ void GraphicsSettingsWidget::onScreenshotSizeChanged()
 	const bool custom = dialog()->getEffectiveIntValue("EmuCore/GS", "ScreenshotSize",
 							static_cast<int>(GSScreenshotSize::CustomResolution)) == static_cast<int>(GSScreenshotSize::CustomResolution);
 	m_capture.screenshotDimensions->setEnabled(custom);
+}
+
+void GraphicsSettingsWidget::onScreenshotFormatChanged()
+{
+	m_capture.screenshotEncodingOptions->setCurrentIndex(dialog()->getEffectiveIntValue("EmuCore/GS", "ScreenshotFormat",
+		static_cast<int>(GSScreenshotFormat::PNG)));
 }
 
 #include "moc_GraphicsSettingsWidget.cpp"

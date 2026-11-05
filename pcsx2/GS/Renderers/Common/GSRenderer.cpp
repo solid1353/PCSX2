@@ -485,8 +485,11 @@ static void CompressAndWriteScreenshot(std::string filename, u32 width, u32 heig
 
 	// maybe std::async would be better here.. but it's definitely worth threading, large screenshots take a while to compress.
 	std::unique_lock lock(s_screenshot_threads_mutex);
+	const int quality = (GSConfig.ScreenshotFormat == GSScreenshotFormat::PNG)  ? GSConfig.ScreenshotPNGCompression * 10 :
+	                    (GSConfig.ScreenshotFormat == GSScreenshotFormat::JPEG) ? GSConfig.ScreenshotJPEGQuality :
+	                                                                              GSConfig.ScreenshotWebPQuality;
 	s_screenshot_threads.emplace_back([key = std::move(key), filename = std::move(filename), image = std::move(image),
-										  quality = GSConfig.ScreenshotQuality]() {
+										  quality]() {
 		if (image.SaveToFile(filename.c_str(), quality))
 		{
 			if (!GSDumpReplayer::IsRunner())
@@ -789,18 +792,7 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 				Host::OSD_INFO_DURATION);
 		}
 
-		if (SaveSnapshotToMemory(&screenshot_width, &screenshot_height, &screenshot_pixels))
-		{
-			CompressAndWriteScreenshot(fmt::format("{}.{}", m_snapshot, GetScreenshotSuffix()),
-				screenshot_width, screenshot_height, std::move(screenshot_pixels));
-		}
-		else
-		{
-			Host::AddIconOSDMessage("GSScreenshot", ICON_FA_CAMERA,
-				TRANSLATE_SV("GS", "Failed to render/download screenshot."), Host::OSD_ERROR_DURATION);
-		}
-
-		m_snapshot = {};
+		SaveScreenshot();
 	}
 	else if (m_dump)
 	{
@@ -868,8 +860,25 @@ void GSRenderer::QueueSnapshot(const std::string& path, const u32 gsdump_frames)
 	else
 		m_snapshot = GSGetBaseSnapshotFilename();
 
-	// this is really gross, but wx we get the snapshot request after shift...
 	m_dump_frames = gsdump_frames;
+	if (gsdump_frames == 0 && VMManager::GetState() == VMState::Paused)
+		SaveScreenshot();
+}
+
+void GSRenderer::SaveScreenshot()
+{
+	u32 width = 0, height = 0;
+	std::vector<u32> pixels;
+	if (SaveSnapshotToMemory(&width, &height, &pixels))
+	{
+		CompressAndWriteScreenshot(fmt::format("{}.{}", m_snapshot, GetScreenshotSuffix()), width, height, std::move(pixels));
+	}
+	else
+	{
+		Host::AddIconOSDMessage("GSScreenshot", ICON_FA_CAMERA,
+			TRANSLATE_SV("GS", "Failed to render/download screenshot."), Host::OSD_ERROR_DURATION);
+	}
+	m_snapshot.clear();
 }
 
 void GSRenderer::QueueSavestateGSDump(std::function<void(std::vector<u8>)> data_callback)
@@ -885,7 +894,7 @@ void GSRenderer::QueueSavestateGSDump(std::function<void(std::vector<u8>)> data_
 
 	u32 screenshot_width = 0, screenshot_height = 0;
 	std::vector<u32> screenshot_pixels;
-	SaveSnapshotToMemory(&screenshot_width, &screenshot_height, &screenshot_pixels);
+	SaveSnapshotToMemory(640, 480, true, false, &screenshot_width, &screenshot_height, &screenshot_pixels);
 	// Buffer compressed output until all four frames complete; this needs proper testing during replay.
 	m_savestate_dumps.push_back({GSDumpBase::CreateZstDump("GS", VMManager::GetDiscSerial(),
 		VMManager::GetDiscCRC(), screenshot_width, screenshot_height,
@@ -988,6 +997,9 @@ void GSRenderer::StopGSDump()
 
 void GSRenderer::PresentCurrentFrame()
 {
+	if (!m_snapshot.empty() && m_dump_frames == 0 && VMManager::GetState() == VMState::Paused)
+		SaveScreenshot();
+
 	if (BeginPresentFrame(false))
 	{
 		GSTexture* current = g_gs_device->GetCurrent();
@@ -1070,6 +1082,17 @@ bool GSRenderer::IsIdleFrame() const
 
 bool GSRenderer::SaveSnapshotToMemory(u32* width, u32* height, std::vector<u32>* pixels)
 {
+	const bool custom_resolution = (GSConfig.ScreenshotSize == GSScreenshotSize::CustomResolution);
+	const bool window_resolution = (GSConfig.ScreenshotSize == GSScreenshotSize::WindowResolution);
+	const bool apply_aspect = (GSConfig.ScreenshotSize != GSScreenshotSize::InternalResolutionUncorrected);
+	const u32 window_width = custom_resolution ? GSConfig.ScreenshotWidth : (window_resolution ? g_gs_device->GetWindowWidth() : 0);
+	const u32 window_height = custom_resolution ? GSConfig.ScreenshotHeight : (window_resolution ? g_gs_device->GetWindowHeight() : 0);
+	return SaveSnapshotToMemory(window_width, window_height, apply_aspect, !custom_resolution, width, height, pixels);
+}
+
+bool GSRenderer::SaveSnapshotToMemory(u32 window_width, u32 window_height, bool apply_aspect, bool crop_borders,
+	u32* width, u32* height, std::vector<u32>* pixels)
+{
 	GSTexture* const current = g_gs_device->GetCurrent();
 	if (!current)
 	{
@@ -1081,12 +1104,6 @@ bool GSRenderer::SaveSnapshotToMemory(u32* width, u32* height, std::vector<u32>*
 
 	const GSVector4i src_rect(CalculateDrawSrcRect(current, m_real_size));
 	const GSVector4 src_uv(GSVector4(src_rect) / GSVector4(current->GetSize()).xyxy());
-
-	const bool custom_resolution = (GSConfig.ScreenshotSize == GSScreenshotSize::CustomResolution);
-	const bool window_resolution = (GSConfig.ScreenshotSize == GSScreenshotSize::WindowResolution);
-	const bool apply_aspect = (GSConfig.ScreenshotSize != GSScreenshotSize::InternalResolutionUncorrected);
-	const u32 window_width = custom_resolution ? GSConfig.ScreenshotWidth : (window_resolution ? g_gs_device->GetWindowWidth() : 0);
-	const u32 window_height = custom_resolution ? GSConfig.ScreenshotHeight : (window_resolution ? g_gs_device->GetWindowHeight() : 0);
 
 	const bool is_progressive = (GetVideoMode() == GSVideoMode::SDTV_480P);
 	GSVector4 draw_rect;
@@ -1116,7 +1133,7 @@ bool GSRenderer::SaveSnapshotToMemory(u32* width, u32* height, std::vector<u32>*
 	{
 		draw_rect = CalculateDrawDstRect(window_width, window_height, src_rect, current->GetSize(),
 			GSDisplayAlignment::LeftOrTop, false, is_progressive);
-		if (custom_resolution)
+		if (!crop_borders)
 		{
 			// Keep the entire aspect-corrected image inside the requested canvas, even with vertical stretch.
 			const float draw_width = std::max(1.0f, draw_rect.z - draw_rect.x);
@@ -1128,8 +1145,8 @@ bool GSRenderer::SaveSnapshotToMemory(u32* width, u32* height, std::vector<u32>*
 	}
 	const u32 draw_width = static_cast<u32>(draw_rect.z - draw_rect.x);
 	const u32 draw_height = static_cast<u32>(draw_rect.w - draw_rect.y);
-	const u32 image_width = custom_resolution ? window_width : draw_width;
-	const u32 image_height = custom_resolution ? window_height : draw_height;
+	const u32 image_width = crop_borders ? draw_width : window_width;
+	const u32 image_height = crop_borders ? draw_height : window_height;
 
 	// We're not expecting screenshots to be fast, so just allocate a download texture on demand.
 	GSTexture* rt = g_gs_device->CreateRenderTarget(draw_width, draw_height, GSTexture::Format::Color, false);

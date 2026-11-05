@@ -21,7 +21,7 @@
      </property>
      <layout class="QGridLayout" name="gridLayout_2">
       <item row="0" column="0">
-       <layout class="QHBoxLayout" name="screenshotLayout" stretch="0,1,0,0,0">
+       <layout class="QHBoxLayout" name="screenshotLayout" stretch="0,1,0,0">
         <item>
          <widget class="QLabel" name="screenshotSizeLabel">
           <property name="text">
@@ -82,26 +82,124 @@
          </widget>
         </item>
         <item>
-         <widget class="QLabel" name="screenshotQualityLabel">
-          <property name="text">
-           <string>Quality:</string>
+         <widget class="QStackedWidget" name="screenshotEncodingOptions">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
           </property>
-          <property name="buddy">
-           <cstring>screenshotQuality</cstring>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QSpinBox" name="screenshotQuality">
-          <property name="suffix">
-           <string>%</string>
-          </property>
-          <property name="minimum">
-           <number>1</number>
-          </property>
-          <property name="maximum">
-           <number>100</number>
-          </property>
+          <widget class="QWidget" name="screenshotPNGOptions">
+           <layout class="QHBoxLayout" name="screenshotPNGLayout">
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="screenshotPNGCompressionLabel">
+              <property name="text">
+               <string>Compression:</string>
+              </property>
+              <property name="buddy">
+               <cstring>screenshotPNGCompression</cstring>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="screenshotPNGCompression">
+              <property name="maximum">
+               <number>9</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="screenshotJPEGOptions">
+           <layout class="QHBoxLayout" name="screenshotJPEGLayout">
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="screenshotJPEGQualityLabel">
+              <property name="text">
+               <string>Quality:</string>
+              </property>
+              <property name="buddy">
+               <cstring>screenshotJPEGQuality</cstring>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="screenshotJPEGQuality">
+              <property name="suffix">
+               <string>%</string>
+              </property>
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>100</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="screenshotWebPOptions">
+           <layout class="QHBoxLayout" name="screenshotWebPLayout">
+            <property name="leftMargin">
+             <number>0</number>
+            </property>
+            <property name="topMargin">
+             <number>0</number>
+            </property>
+            <property name="rightMargin">
+             <number>0</number>
+            </property>
+            <property name="bottomMargin">
+             <number>0</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="screenshotWebPQualityLabel">
+              <property name="text">
+               <string>Quality:</string>
+              </property>
+              <property name="buddy">
+               <cstring>screenshotWebPQuality</cstring>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="screenshotWebPQuality">
+              <property name="suffix">
+               <string>%</string>
+              </property>
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>100</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
          </widget>
         </item>
        </layout>
@@ -457,7 +555,11 @@
  <tabstops>
   <tabstop>screenshotSize</tabstop>
   <tabstop>screenshotFormat</tabstop>
-  <tabstop>screenshotQuality</tabstop>
+  <tabstop>screenshotPNGCompression</tabstop>
+  <tabstop>screenshotJPEGQuality</tabstop>
+  <tabstop>screenshotWebPQuality</tabstop>
+  <tabstop>screenshotWidth</tabstop>
+  <tabstop>screenshotHeight</tabstop>
   <tabstop>captureContainer</tabstop>
   <tabstop>enableVideoCapture</tabstop>
   <tabstop>videoCaptureCodec</tabstop>

@@ -318,10 +318,6 @@ void MainWindow::setupAdditionalUi()
 	m_ui.toolBar->setMovable(!toolbars_locked);
 	setupToolbarCustomization();
 
-	m_settings_toolbar_menu = new QMenu(m_ui.toolBar);
-	m_settings_toolbar_menu->addAction(m_ui.actionSettings);
-	m_settings_toolbar_menu->addAction(m_ui.actionViewGameProperties);
-
 	for (u32 scale = 0; scale <= 10; scale++)
 	{
 		QAction* action = m_ui.menuWindowSize->addAction((scale == 0) ? tr("Internal Resolution") : tr("%1x Scale").arg(scale));
@@ -922,7 +918,7 @@ void MainWindow::connectSignals()
 	connect(m_ui.actionToolbarPowerOff, &QAction::triggered, this, [this]() { requestShutdown(true, true, EmuConfig.SaveStateOnShutdown); });
 	connect(m_ui.actionToolbarLoadState, &QAction::triggered, this, [this]() { m_ui.menuLoadState->exec(QCursor::pos()); });
 	connect(m_ui.actionToolbarSaveState, &QAction::triggered, this, [this]() { m_ui.menuSaveState->exec(QCursor::pos()); });
-	connect(m_ui.actionToolbarSettings, &QAction::triggered, this, &MainWindow::onSettingsTriggeredFromToolbar);
+	connect(m_ui.actionToolbarSettings, &QAction::triggered, [this]() { doSettings(); });
 	connect(m_ui.actionToolbarControllerSettings, &QAction::triggered,
 		[this]() { doControllerSettings(ControllerSettingsWindow::Category::GlobalSettings); });
 	connect(m_ui.actionToolbarHotkeySettings, &QAction::triggered,
@@ -1459,18 +1455,6 @@ void MainWindow::onAchievementsHardcoreModeChanged(bool enabled)
 		// or cancel the action later, so we should keep the debugger around
 		if (g_debugger_window && !DebugInterface::getPauseOnEntry())
 			DebuggerWindow::destroyInstance();
-	}
-}
-
-void MainWindow::onSettingsTriggeredFromToolbar()
-{
-	if (s_vm_valid)
-	{
-		m_settings_toolbar_menu->exec(QCursor::pos());
-	}
-	else
-	{
-		doSettings();
 	}
 }
 

@@ -209,7 +209,6 @@ private Q_SLOTS:
 	void onBlockDumpActionToggled(bool checked);
 	void onShowAdvancedSettingsToggled(bool checked);
 	void onVideoCaptureToggled(bool checked);
-	void onSettingsTriggeredFromToolbar();
 
 	// Input Recording
 	void onInputRecNewActionTriggered();
@@ -358,7 +357,6 @@ private:
 	QMenu* m_status_speed_menu = nullptr;
 	QLabel* m_status_resolution_widget = nullptr;
 
-	QMenu* m_settings_toolbar_menu = nullptr;
 	QMenu* m_toolbar_actions_menu = nullptr;
 	QList<QAction*> m_toolbar_actions;
 	QStringList m_hidden_toolbar_actions;

@@ -23,6 +23,9 @@ the game does not see the chord's inputs (`pcsx2/Input/InputManager.cpp`).
 
 Starting a game with a non-default PAL frame rate shows no warning.
 
+The toolbar's Settings button always opens Settings, without a menu while a
+game runs (`pcsx2-qt/MainWindow.cpp`).
+
 The save state selector closes 2 seconds after the last slot change instead of
 5. While it is shown, Esc closes it, and neither that press
 nor its release reaches any hotkey or pad binding

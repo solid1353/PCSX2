@@ -11,6 +11,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstdio>
 #include <optional>
 
 TEST(HotkeyBindings, ActiveBindingsComeOnlyFromSettings)
@@ -100,7 +102,55 @@ namespace
 			m_settings.SetStringList("Hotkeys", "HoldTurbo", {"Pointer-0/Button1 & Pointer-0/Button0"});
 		}
 	};
+
+	class SelectStartR1Test : public KeyboardPadChordTest
+	{
+	protected:
+		void ConfigureBindings() override
+		{
+			KeyboardPadChordTest::ConfigureBindings();
+			m_settings.SetStringList("Pad1", "Select", {"Keyboard/Backspace"});
+			m_settings.SetStringList("Pad1", "Start", {"Keyboard/Return"});
+			m_settings.SetStringList("Pad1", "R1", {"Keyboard/E"});
+			m_settings.SetStringList("Pad2", "Select", {"Keyboard/Shift & Keyboard/Backspace"});
+			m_settings.SetStringList("Pad2", "Start", {"Keyboard/Shift & Keyboard/Return"});
+			m_settings.SetStringList("Pad2", "R1", {"Keyboard/Shift & Keyboard/E"});
+		}
+	};
 } // namespace
+
+TEST_F(SelectStartR1Test, EveryPressOrderPreservesAllThreePadInputs)
+{
+	const char* keys[] = {"Keyboard/Backspace", "Keyboard/Return", "Keyboard/E"};
+	const u32 inputs[] = {PadDualshock2::PAD_SELECT, PadDualshock2::PAD_START, PadDualshock2::PAD_R1};
+	unsigned order[] = {0, 1, 2};
+	do
+	{
+		bool held[3] = {};
+		for (const unsigned step : order)
+		{
+			Press(keys[step], 1.0f);
+			held[step] = true;
+			std::printf("[input trace] press %s: P1 Select=%.0f Start=%.0f R1=%.0f; wire=0x%08x\n",
+				keys[step], Pad::GetPad(0)->GetEffectiveInput(inputs[0]),
+				Pad::GetPad(0)->GetEffectiveInput(inputs[1]), Pad::GetPad(0)->GetEffectiveInput(inputs[2]),
+				Pad::GetPad(0)->GetButtons());
+			for (unsigned i = 0; i < 3; i++)
+			{
+				EXPECT_FLOAT_EQ(Pad::GetPad(0)->GetEffectiveInput(inputs[i]), held[i] ? 255.0f : 0.0f)
+					<< keys[step] << " -> " << keys[i];
+				EXPECT_FLOAT_EQ(Pad::GetPad(1)->GetEffectiveInput(inputs[i]), 0.0f);
+			}
+		}
+		for (const unsigned step : order)
+		{
+			Press(keys[step], 0.0f);
+			held[step] = false;
+			for (unsigned i = 0; i < 3; i++)
+				EXPECT_FLOAT_EQ(Pad::GetPad(0)->GetEffectiveInput(inputs[i]), held[i] ? 255.0f : 0.0f);
+		}
+	} while (std::next_permutation(std::begin(order), std::end(order)));
+}
 
 TEST_F(KeyboardPadChordTest, ShiftAloneDoesNotPressPadTwoAndCompletedChordSuppressesPadOne)
 {

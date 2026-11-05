@@ -203,6 +203,19 @@ u8 PadDualshock2::ButtonQuery(u8 commandByte)
 u8 PadDualshock2::Poll(u8 commandByte)
 {
 	const u32 buttons = GetButtons();
+	if (commandBytesReceived == 3)
+	{
+		static std::array<u32, Pad::NUM_CONTROLLER_PORTS> previous_buttons{};
+		constexpr u32 trace_mask = (1u << 8) | (1u << 11) | (1u << 3);
+		if ((previous_buttons[unifiedSlot] & trace_mask) != (buttons & trace_mask))
+		{
+			Console.WriteLn("[InputTrace] poll Pad%u buttons=%08X Select=%d Start=%d R1=%d R1-pressure=%u",
+				static_cast<u32>(unifiedSlot) + 1, buttons, static_cast<int>(IsButtonBitSet(buttons, 8)),
+				static_cast<int>(IsButtonBitSet(buttons, 11)), static_cast<int>(IsButtonBitSet(buttons, 3)),
+				static_cast<u32>(GetPressure(Inputs::PAD_R1)));
+			previous_buttons[unifiedSlot] = buttons;
+		}
+	}
 	u8 largeMotor = 0x00;
 	u8 smallMotor = 0x00;
 

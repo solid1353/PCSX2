@@ -284,6 +284,12 @@ std::optional<u32> InputManager::ConvertHostKeyboardStringToCode(const std::stri
 {
 	if (str == "Shift")
 		return 16;
+	if (str == "Backspace")
+		return 8;
+	if (str == "Return")
+		return 13;
+	if (str == "E")
+		return 69;
 	if (str == "W")
 		return 87;
 	return std::nullopt;

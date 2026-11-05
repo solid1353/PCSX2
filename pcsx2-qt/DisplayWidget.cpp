@@ -230,16 +230,6 @@ void DisplaySurface::handleKeyInputEvent(QEvent* event)
 		case QEvent::KeyRelease:
 		{
 			const QKeyEvent* key_event = static_cast<QKeyEvent*>(event);
-			const u32 key = QtUtils::KeyEventToCode(key_event);
-			const bool trace_key = (key == Qt::Key_Backspace || key == Qt::Key_Return || key == Qt::Key_E ||
-									key_event->nativeVirtualKey() == 0x45);
-			if (trace_key)
-			{
-				Console.WriteLn("[InputTrace] Qt key=%08X symbol=%08X native=%08X scan=%08X modifiers=%08X %s repeat=%d",
-					key, static_cast<u32>(key_event->key()), static_cast<u32>(key_event->nativeVirtualKey()), static_cast<u32>(key_event->nativeScanCode()),
-					static_cast<u32>(key_event->modifiers()), event->type() == QEvent::KeyPress ? "press" : "release",
-					static_cast<int>(key_event->isAutoRepeat()));
-			}
 
 			// Forward text input to imgui.
 			if (ImGuiManager::WantsTextInput() && key_event->type() == QEvent::KeyPress)
@@ -263,17 +253,14 @@ void DisplaySurface::handleKeyInputEvent(QEvent* event)
 			// but I can't think of a better way of handling it, and there doesn't appear to be
 			// any window flag which changes this behavior that I can see.
 
+			const u32 key = QtUtils::KeyEventToCode(key_event);
 			const Qt::KeyboardModifiers modifiers = key_event->modifiers();
 			const bool pressed = (key_event->type() == QEvent::KeyPress);
 			const auto it = std::find(m_keys_pressed_with_modifiers.begin(), m_keys_pressed_with_modifiers.end(), key);
 			if (it != m_keys_pressed_with_modifiers.end())
 			{
 				if (pressed)
-				{
-					if (trace_key)
-						Console.WriteLn("[InputTrace] Qt key=%08X discarded as a duplicate modifier press", key);
 					return;
-				}
 				else
 					m_keys_pressed_with_modifiers.erase(it);
 			}
@@ -282,9 +269,7 @@ void DisplaySurface::handleKeyInputEvent(QEvent* event)
 				m_keys_pressed_with_modifiers.push_back(key);
 			}
 
-			Host::RunOnCPUThread([key, pressed, trace_key]() {
-				if (trace_key)
-					Console.WriteLn("[InputTrace] CPU received key=%08X pressed=%d", key, static_cast<int>(pressed));
+			Host::RunOnCPUThread([key, pressed]() {
 				InputManager::InvokeEvents(InputManager::MakeHostKeyboardKey(key), static_cast<float>(pressed));
 			});
 

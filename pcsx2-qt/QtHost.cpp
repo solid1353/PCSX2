@@ -56,12 +56,6 @@
 #include <QtWidgets/QFileDialog>
 #include <QtGui/QClipboard>
 #include <QtGui/QInputMethod>
-#include <QtGui/QKeyEvent>
-
-#ifdef _WIN32
-#include "common/RedtapeWindows.h"
-#include <QtCore/QAbstractNativeEventFilter>
-#endif
 
 #include "fmt/format.h"
 
@@ -935,7 +929,6 @@ void EmuThread::onApplicationStateChanged(Qt::ApplicationState state)
 		return;
 
 	const bool focus_loss = (state != Qt::ApplicationActive);
-	Console.WriteLn("[InputTrace] application state=%d focus_loss=%d", static_cast<int>(state), static_cast<int>(focus_loss));
 	if (focus_loss)
 	{
 		if (m_pause_on_focus_loss && !m_was_paused_by_focus_loss && VMManager::GetState() == VMState::Running)
@@ -2954,47 +2947,10 @@ bool QtHost::RunSetupWizard()
 	return true;
 }
 
-#ifdef _WIN32
-class InputTraceNativeEventFilter final : public QAbstractNativeEventFilter
-{
-public:
-	bool nativeEventFilter(const QByteArray&, void* message, qintptr*) override
-	{
-		const MSG* msg = static_cast<const MSG*>(message);
-		if ((msg->message == WM_KEYDOWN || msg->message == WM_KEYUP ||
-				msg->message == WM_SYSKEYDOWN || msg->message == WM_SYSKEYUP) &&
-			(msg->wParam == VK_BACK || msg->wParam == VK_RETURN || msg->wParam == 'E'))
-		{
-			Console.WriteLn("[InputTrace] Windows hwnd=%p message=%04X key=%02X flags=%08X async-Backspace=%d async-Enter=%d async-E=%d",
-				static_cast<void*>(msg->hwnd), static_cast<u32>(msg->message), static_cast<u32>(msg->wParam),
-				static_cast<u32>(msg->lParam), static_cast<int>((GetAsyncKeyState(VK_BACK) & 0x8000) != 0),
-				static_cast<int>((GetAsyncKeyState(VK_RETURN) & 0x8000) != 0), static_cast<int>((GetAsyncKeyState('E') & 0x8000) != 0));
-		}
-		return false;
-	}
-};
-#endif
-
 class PCSX2MainApplication : public QApplication
 {
 public:
 	using QApplication::QApplication;
-
-	bool notify(QObject* receiver, QEvent* event) override
-	{
-		if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease ||
-			event->type() == QEvent::ShortcutOverride)
-		{
-			const QKeyEvent* key_event = static_cast<const QKeyEvent*>(event);
-			const u32 key = QtUtils::KeyEventToCode(key_event);
-			if (key == Qt::Key_Backspace || key == Qt::Key_Return || key == Qt::Key_E || key_event->nativeVirtualKey() == 0x45)
-			{
-				Console.WriteLn("[InputTrace] Qt routing type=%d key=%08X receiver=%s name=%s",
-					static_cast<int>(event->type()), key, receiver->metaObject()->className(), receiver->objectName().toUtf8().constData());
-			}
-		}
-		return QApplication::notify(receiver, event);
-	}
 
 	bool event(QEvent* event) override
 	{
@@ -3026,10 +2982,6 @@ int main(int argc, char* argv[])
 	QtHost::RegisterTypes();
 
 	PCSX2MainApplication app(argc, argv);
-#ifdef _WIN32
-	InputTraceNativeEventFilter input_trace_filter;
-	app.installNativeEventFilter(&input_trace_filter);
-#endif
 
 	QtHost::InitializeClipboard();
 

@@ -5,7 +5,6 @@
 #include "Input/InputManager.h"
 #include "Input/InputSource.h"
 #include "SIO/Pad/Pad.h"
-#include "SIO/Pad/PadBase.h"
 #include "SIO/Sio.h"
 #include "USB/USB.h"
 #include "VMManager.h"
@@ -934,27 +933,12 @@ void InputManager::AddPadBindings(SettingsInterface& si, u32 pad_index, bool is_
 				const std::vector<std::string> bindings(si.GetStringList(section.c_str(), bi.name));
 				if (!bindings.empty())
 				{
-					const bool trace_binding = (std::string_view(bi.name) == "Select" ||
-												std::string_view(bi.name) == "Start" || std::string_view(bi.name) == "R1");
-					if (trace_binding)
-					{
-						for (const std::string& binding : bindings)
-							Console.WriteLn("[InputTrace] configured Pad%u/%s = %s", pad_index + 1, bi.name, binding.c_str());
-					}
 					// we use axes for all pad bindings to simplify things, and because they are pressure sensitive
 					const float sensitivity = si.GetFloatValue(section.c_str(), fmt::format("{}Scale", bi.name).c_str(), 1.0f);
 					const float deadzone = si.GetFloatValue(section.c_str(), fmt::format("{}Deadzone", bi.name).c_str(), 0.0f);
 					AddBindings(
-						bindings, InputAxisEventHandler{[pad_index, bind_index = bi.bind_index, sensitivity, deadzone, trace_binding, binding_name = bi.name](InputBindingKey key, float value) {
-							const float scaled = ApplySingleBindingScale(sensitivity, deadzone, value);
-							Pad::SetControllerState(pad_index, bind_index, scaled);
-							if (trace_binding)
-							{
-								const PadBase* pad = Pad::GetPad(static_cast<u8>(pad_index));
-								Console.WriteLn("[InputTrace] Pad%u/%s input=%g scaled=%g effective=%g buttons=%08X source=%u key=%08X",
-									pad_index + 1, binding_name, value, scaled, pad->GetEffectiveInput(bind_index), pad->GetButtons(),
-									static_cast<u32>(key.source_type), static_cast<u32>(key.data));
-							}
+						bindings, InputAxisEventHandler{[pad_index, bind_index = bi.bind_index, sensitivity, deadzone](InputBindingKey key, float value) {
+							Pad::SetControllerState(pad_index, bind_index, ApplySingleBindingScale(sensitivity, deadzone, value));
 						}},
 						bi.bind_type, si, section.c_str(), bi.name, is_profile);
 				}
@@ -1192,39 +1176,15 @@ bool InputManager::IsShadowedByActiveChord(const InputBinding* binding)
 	return false;
 }
 
-static const char* GetInputTraceKeyName(InputBindingKey key)
-{
-	if (key.source_type == InputSourceType::Keyboard)
-	{
-		for (const char* name : {"Backspace", "Return", "E"})
-		{
-			if (InputManager::ConvertHostKeyboardStringToCode(name) == key.data)
-				return name;
-		}
-	}
-	return nullptr;
-}
-
 bool InputManager::InvokeEvents(InputBindingKey key, float value, GenericInputBinding generic_key,
 	GenericInputBinding axis_neg_key, GenericInputBinding axis_pos_key)
 {
-	const char* trace_name = GetInputTraceKeyName(key);
-	if (trace_name)
-		Console.WriteLn("[InputTrace] dispatch Keyboard/%s value=%g", trace_name, value);
 	if (DoEventHook(key, value))
-	{
-		if (trace_name)
-			Console.WriteLn("[InputTrace] Keyboard/%s consumed by input intercept hook", trace_name);
 		return true;
-	}
 
 	// If imgui ate the event, don't fire our handlers.
 	const bool skip_button_handlers = PreprocessEvent(key, value, generic_key, axis_neg_key, axis_pos_key);
-	const bool handled = ProcessEvent(key, value, skip_button_handlers);
-	if (trace_name)
-		Console.WriteLn("[InputTrace] dispatch Keyboard/%s captured=%d handled=%d", trace_name,
-			static_cast<int>(skip_button_handlers), static_cast<int>(handled));
-	return handled;
+	return ProcessEvent(key, value, skip_button_handlers);
 }
 
 bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_button_handlers)
@@ -1232,7 +1192,6 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
 	// find all the bindings associated with this key
 	const InputBindingKey masked_key = key.MaskDirection();
 	const auto range = s_binding_map.equal_range(masked_key);
-	const bool trace_key = (GetInputTraceKeyName(key) != nullptr);
 	if (range.first == s_binding_map.end())
 		return false;
 
@@ -1416,12 +1375,6 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
 				for (u32 i = 1; i < binding->num_keys; i++)
 					next_value = std::min(next_value, binding->axis_values[i]);
 			}
-		}
-		if (trace_key)
-		{
-			Console.WriteLn("[InputTrace] binding %s mask=%02X/%02X previous=%g next=%g",
-				ConvertInputBindingKeysToString(InputBindingInfo::Type::Button, binding->keys, binding->num_keys).c_str(),
-				binding->current_mask, binding->full_mask, binding->last_axis_value, next_value);
 		}
 		if (next_value != binding->last_axis_value)
 		{

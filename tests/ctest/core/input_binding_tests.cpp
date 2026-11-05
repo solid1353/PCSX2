@@ -12,7 +12,6 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdio>
 #include <optional>
 
 TEST(HotkeyBindings, ActiveBindingsComeOnlyFromSettings)
@@ -131,10 +130,6 @@ TEST_F(SelectStartR1Test, EveryPressOrderPreservesAllThreePadInputs)
 		{
 			Press(keys[step], 1.0f);
 			held[step] = true;
-			std::printf("[input trace] press %s: P1 Select=%.0f Start=%.0f R1=%.0f; wire=0x%08x\n",
-				keys[step], Pad::GetPad(0)->GetEffectiveInput(inputs[0]),
-				Pad::GetPad(0)->GetEffectiveInput(inputs[1]), Pad::GetPad(0)->GetEffectiveInput(inputs[2]),
-				Pad::GetPad(0)->GetButtons());
 			for (unsigned i = 0; i < 3; i++)
 			{
 				EXPECT_FLOAT_EQ(Pad::GetPad(0)->GetEffectiveInput(inputs[i]), held[i] ? 255.0f : 0.0f)

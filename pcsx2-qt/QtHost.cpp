@@ -2965,9 +2965,10 @@ public:
 				msg->message == WM_SYSKEYDOWN || msg->message == WM_SYSKEYUP) &&
 			(msg->wParam == VK_BACK || msg->wParam == VK_RETURN || msg->wParam == 'E'))
 		{
-			Console.WriteLn("[InputTrace] Windows hwnd=%p message=%04X key=%02X flags=%08X",
+			Console.WriteLn("[InputTrace] Windows hwnd=%p message=%04X key=%02X flags=%08X async-Backspace=%d async-Enter=%d async-E=%d",
 				static_cast<void*>(msg->hwnd), static_cast<u32>(msg->message), static_cast<u32>(msg->wParam),
-				static_cast<u32>(msg->lParam));
+				static_cast<u32>(msg->lParam), static_cast<int>((GetAsyncKeyState(VK_BACK) & 0x8000) != 0),
+				static_cast<int>((GetAsyncKeyState(VK_RETURN) & 0x8000) != 0), static_cast<int>((GetAsyncKeyState('E') & 0x8000) != 0));
 		}
 		return false;
 	}

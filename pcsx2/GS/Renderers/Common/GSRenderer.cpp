@@ -816,8 +816,7 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 		const GSVector2i size = GSCapture::GetSize();
 		if (GSTexture* current = g_gs_device->GetCurrent())
 		{
-			// Always draw the frame as screenshots do: reading the display target directly left a black band
-			// at the bottom of every second video frame.
+			// Always read back a drawn copy of the frame, as screenshots do, never the display target itself.
 			GSTexture* temp = g_gs_device->CreateRenderTarget(size.x, size.y, GSTexture::Format::Color, false);
 			if (temp)
 			{

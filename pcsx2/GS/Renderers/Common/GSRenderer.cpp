@@ -816,20 +816,14 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 		const GSVector2i size = GSCapture::GetSize();
 		if (GSTexture* current = g_gs_device->GetCurrent())
 		{
-			// TODO: Maybe avoid this copy in the future? We can use swscale to fix it up on the dumping thread..
-			if (current->GetSize() != size)
+			// Always draw the frame as screenshots do: reading the display target directly left a black band
+			// at the bottom of every second video frame.
+			GSTexture* temp = g_gs_device->CreateRenderTarget(size.x, size.y, GSTexture::Format::Color, false);
+			if (temp)
 			{
-				GSTexture* temp = g_gs_device->CreateRenderTarget(size.x, size.y, GSTexture::Format::Color, false);
-				if (temp)
-				{
-					g_gs_device->StretchRect(current, temp, GSVector4(0, 0, size.x, size.y), ShaderConvert::COPY, Biln);
-					GSCapture::DeliverVideoFrame(temp);
-					g_gs_device->Recycle(temp);
-				}
-			}
-			else
-			{
-				GSCapture::DeliverVideoFrame(current);
+				g_gs_device->StretchRect(current, temp, GSVector4(0, 0, size.x, size.y), ShaderConvert::COPY, Biln);
+				GSCapture::DeliverVideoFrame(temp);
+				g_gs_device->Recycle(temp);
 			}
 		}
 		else

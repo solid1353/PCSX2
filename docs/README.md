@@ -45,6 +45,9 @@ use 1-100% (default 100%). Each format remembers its own value in
 `ScreenshotPNGCompression`, `ScreenshotJPEGQuality`, or `ScreenshotWebPQuality`.
 Ordinary screenshots save the current frame immediately while paused.
 
+Video capture draws each frame into a temporary target before reading it back,
+even at the frame's own size (`pcsx2/GS/Renderers/Common/GSRenderer.cpp`).
+
 Standalone GS dumps use the `[Folders]` `GSDumps` directory, defaulting to
 `gs_dumps` beneath the data root. Their companion screenshots use `Snapshots`.
 Explicit capture paths select their requested destination. Emulated USB

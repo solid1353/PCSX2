@@ -12,8 +12,8 @@ namespace ImGuiManager
 {
 	void RenderOverlays();
 	// Called on the GS thread, like the overlay renderer.
-	void ToggleNA228ResourceMonitor();
-	void ToggleNA228UJFrame();
+	void SetNA228ResourceMonitor(bool enabled);
+	void SetNA228UJFrame(bool enabled);
 }
 
 ImVec2 CalculateOSDPosition(OsdOverlayPos position, float margin, const ImVec2& text_size, float window_width, float window_height);

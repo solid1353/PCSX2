@@ -26,7 +26,9 @@ Starting a game with a non-default PAL frame rate shows no warning.
 The unbound Graphics hotkey Toggle NA228 UJ Frame shows, in an NA228 build, the
 playing Ultimate Jutsu film's frame below the NA228 Resource Monitor: `UJ frame
 2:118` for part 2 of a multi-part film, `UJ frame 118` otherwise, and nothing
-when no film plays (`pcsx2/NA228UJFrame.cpp`).
+when no film plays (`pcsx2/NA228UJFrame.cpp`). It and the NA228 Resource Monitor
+keep their on/off state in `OsdShowNA228UJFrame` and
+`OsdShowNA228ResourceMonitor` in `[EmuCore/GS]`.
 
 The toolbar's Settings button always opens Settings, without a menu while a
 game runs (`pcsx2-qt/MainWindow.cpp`).

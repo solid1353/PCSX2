@@ -79,16 +79,14 @@ SmallString s_speed_icon;
 
 constexpr ImU32 white_color = IM_COL32(255, 255, 255, 255);
 
-static bool s_na228_monitor_enabled = false;
 static NA228ResourceMonitor::History s_na228_monitor_history;
-static bool s_na228_uj_frame_enabled = false;
 static ImVec4 s_performance_overlay_bounds;
 // Top of the next NA228 panel; the panels stack down the left edge.
 static float s_na228_panel_y = 0.0f;
 
 static void IncludePerformanceOverlayBounds(const ImVec2& position, const ImVec2& size)
 {
-	if (!s_na228_monitor_enabled && !s_na228_uj_frame_enabled)
+	if (!GSConfig.OsdShowNA228ResourceMonitor && !GSConfig.OsdShowNA228UJFrame)
 		return;
 
 	s_performance_overlay_bounds.x = std::min(s_performance_overlay_bounds.x, position.x);
@@ -1868,26 +1866,26 @@ static std::span<const uint8_t> GetNA228Memory()
 	return {eeMem->Main, NA228ResourceMonitor::EE_RAM_SIZE};
 }
 
-void ImGuiManager::ToggleNA228ResourceMonitor()
+void ImGuiManager::SetNA228ResourceMonitor(bool enabled)
 {
-	s_na228_monitor_enabled = !s_na228_monitor_enabled;
-	if (s_na228_monitor_enabled)
+	GSConfig.OsdShowNA228ResourceMonitor = enabled;
+	if (enabled)
 		s_na228_monitor_history = {};
 
 	if (NA228ResourceMonitor::Detect(GetNA228Memory()))
 		return;
 
-	const char* message = s_na228_monitor_enabled ? "NA228 Resource Monitor on: not an NA228 build" : "NA228 Resource Monitor off";
+	const char* message = enabled ? "NA228 Resource Monitor on: not an NA228 build" : "NA228 Resource Monitor off";
 	Host::AddKeyedOSDMessage("NA228ResourceMonitor", message, Host::OSD_QUICK_DURATION);
 }
 
-void ImGuiManager::ToggleNA228UJFrame()
+void ImGuiManager::SetNA228UJFrame(bool enabled)
 {
-	s_na228_uj_frame_enabled = !s_na228_uj_frame_enabled;
+	GSConfig.OsdShowNA228UJFrame = enabled;
 	if (NA228ResourceMonitor::Detect(GetNA228Memory()))
 		return;
 
-	const char* message = s_na228_uj_frame_enabled ? "NA228 UJ Frame on: not an NA228 build" : "NA228 UJ Frame off";
+	const char* message = enabled ? "NA228 UJ Frame on: not an NA228 build" : "NA228 UJ Frame off";
 	Host::AddKeyedOSDMessage("NA228UJFrame", message, Host::OSD_QUICK_DURATION);
 }
 
@@ -1932,7 +1930,7 @@ void ImGuiManager::DrawNA228Panel(const char* id, std::span<const NA228ResourceM
 
 void ImGuiManager::DrawNA228ResourceMonitor(float scale, float margin, float spacing)
 {
-	if (!s_na228_monitor_enabled)
+	if (!GSConfig.OsdShowNA228ResourceMonitor)
 		return;
 
 	// Sampling needs proper testing with live NA228 gameplay; it can miss frame-end pool peaks.
@@ -1943,7 +1941,7 @@ void ImGuiManager::DrawNA228ResourceMonitor(float scale, float margin, float spa
 
 void ImGuiManager::DrawNA228UJFrame(float scale, float margin, float spacing)
 {
-	if (!s_na228_uj_frame_enabled)
+	if (!GSConfig.OsdShowNA228UJFrame)
 		return;
 
 	std::string text = NA228UJFrame::Format(GetNA228Memory());

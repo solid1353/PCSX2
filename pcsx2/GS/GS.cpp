@@ -1188,6 +1188,14 @@ static void HotkeyToggleOSD()
 		GSConfig.OsdPerformancePos == OsdOverlayPos::None ? EmuConfig.GS.OsdPerformancePos : OsdOverlayPos::None;
 }
 
+// Saves the NA228 overlay's new state to the base settings and shows it on the GS thread.
+static void SetNA228Overlay(const char* key, bool enabled, void (*apply)(bool))
+{
+	Host::SetBaseBoolSettingValue("EmuCore/GS", key, enabled);
+	Host::CommitBaseSettingChanges();
+	MTGS::RunOnGSThread([apply, enabled]() { apply(enabled); });
+}
+
 BEGIN_HOTKEY_LIST(g_gs_hotkeys){"Screenshot", TRANSLATE_NOOP("Hotkeys", "Graphics"),
 	TRANSLATE_NOOP("Hotkeys", "Save Screenshot"),
 	[](s32 pressed) {
@@ -1257,13 +1265,20 @@ BEGIN_HOTKEY_LIST(g_gs_hotkeys){"Screenshot", TRANSLATE_NOOP("Hotkeys", "Graphic
 		}},
 	{"ToggleNA228ResourceMonitor", TRANSLATE_NOOP("Hotkeys", "Graphics"), TRANSLATE_NOOP("Hotkeys", "Toggle NA228 Resource Monitor"),
 		[](s32 pressed) {
-			if (!pressed)
-				MTGS::RunOnGSThread(&ImGuiManager::ToggleNA228ResourceMonitor);
+			if (pressed)
+				return;
+
+			EmuConfig.GS.OsdShowNA228ResourceMonitor = !EmuConfig.GS.OsdShowNA228ResourceMonitor;
+			SetNA228Overlay("OsdShowNA228ResourceMonitor", EmuConfig.GS.OsdShowNA228ResourceMonitor,
+				&ImGuiManager::SetNA228ResourceMonitor);
 		}},
 	{"ToggleNA228UJFrame", TRANSLATE_NOOP("Hotkeys", "Graphics"), TRANSLATE_NOOP("Hotkeys", "Toggle NA228 UJ Frame"),
 		[](s32 pressed) {
-			if (!pressed)
-				MTGS::RunOnGSThread(&ImGuiManager::ToggleNA228UJFrame);
+			if (pressed)
+				return;
+
+			EmuConfig.GS.OsdShowNA228UJFrame = !EmuConfig.GS.OsdShowNA228UJFrame;
+			SetNA228Overlay("OsdShowNA228UJFrame", EmuConfig.GS.OsdShowNA228UJFrame, &ImGuiManager::SetNA228UJFrame);
 		}},
 	{"CycleAspectRatio", TRANSLATE_NOOP("Hotkeys", "Graphics"), TRANSLATE_NOOP("Hotkeys", "Cycle Aspect Ratio"),
 		[](s32 pressed) {

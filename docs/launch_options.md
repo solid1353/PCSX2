@@ -16,6 +16,7 @@ Input recording options are described in
 | `-mute` | Mutes audio output. |
 | `-read-only-settings` | Prevents every settings INI write. |
 | `-pine-port <port>` | Uses PINE slot `1024` through `65535` when PINE is enabled. |
+| `-savestate-folder <path>` | Saves and loads every savestate in this folder instead of the Savestates folder, creating it if missing: slots, hotkeys, PINE, and input recording capture savestates. |
 | `-centered-window` | Sizes the game window to the presented image without borders, fitted within a 1024×768 frame independent of display scaling, centers it on its screen, and suppresses starting fullscreen. The window follows later aspect-ratio changes. |
 | `-no-recenter` | Turns off the **Recenter Window On Aspect Change** setting for the run, so the window keeps the position it is given. `-centered-window` still applies. |
 

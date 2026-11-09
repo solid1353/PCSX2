@@ -177,6 +177,7 @@ namespace EmuFolders
 
 	static bool ShouldUsePortableMode();
 	static std::string GetPortableModePath();
+	static std::string s_savestates_override;
 } // namespace EmuFolders
 
 TraceLogsEE::TraceLogsEE()
@@ -2416,13 +2417,19 @@ std::string EmuFolders::FindContentAliasFile(const std::string_view alias, const
 	return result;
 }
 
+void EmuFolders::SetSavestatesOverride(std::string path)
+{
+	s_savestates_override = std::move(path);
+}
+
 void EmuFolders::LoadConfig(SettingsInterface& si)
 {
 	Bios = LoadPathFromSettings(si, DataRoot, "Bios", "bios");
 	Snapshots = LoadPathFromSettings(si, DataRoot, "Snapshots", "snaps");
 	GSDumps = LoadPathFromSettings(si, DataRoot, "GSDumps", "gs_dumps");
 	Prints = LoadPathFromSettings(si, DataRoot, "Prints", "prints");
-	Savestates = LoadPathFromSettings(si, DataRoot, "Savestates", "sstates");
+	Savestates = s_savestates_override.empty() ? LoadPathFromSettings(si, DataRoot, "Savestates", "sstates") :
+	                                             s_savestates_override;
 	MemoryCards = LoadPathFromSettings(si, DataRoot, "MemoryCards", "memcards");
 	Logs = LoadPathFromSettings(si, DataRoot, "Logs", "logs");
 	Cheats = LoadPathFromSettings(si, DataRoot, "Cheats", "cheats");

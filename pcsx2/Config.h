@@ -1463,6 +1463,8 @@ namespace EmuFolders
 	// Assumes that AppRoot and DataRoot have been initialized.
 	void SetDefaults(SettingsInterface& si);
 	void LoadConfig(SettingsInterface& si);
+	// Replaces the configured Savestates folder for this process without changing settings; empty restores it.
+	void SetSavestatesOverride(std::string path);
 	void LoadContentAliases(SettingsInterface& si);
 	bool EnsureFoldersExist();
 	std::string GetContentAlias(std::string_view serial, u32 crc);

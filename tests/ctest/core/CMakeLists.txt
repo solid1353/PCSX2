@@ -16,6 +16,7 @@ target_include_directories(na228_uj_frame_test PRIVATE ../../../pcsx2)
 target_link_libraries(na228_uj_frame_test PRIVATE fmt::fmt)
 
 add_pcsx2_test(core_test
+	emu_folders_tests.cpp
 	gs_dump_tests.cpp
 	input_binding_tests.cpp
 	input_recording_tests.cpp

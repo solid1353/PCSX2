@@ -25,6 +25,7 @@
 #include "MTGS.h"
 #include "MemoryTypes.h"
 #include "NA228ResourceMonitor.h"
+#include "NA228UJFrame.h"
 #include "Patch.h"
 #include "PerformanceMetrics.h"
 #include "Recording/InputRecording.h"
@@ -80,11 +81,14 @@ constexpr ImU32 white_color = IM_COL32(255, 255, 255, 255);
 
 static bool s_na228_monitor_enabled = false;
 static NA228ResourceMonitor::History s_na228_monitor_history;
+static bool s_na228_uj_frame_enabled = false;
 static ImVec4 s_performance_overlay_bounds;
+// Top of the next NA228 panel; the panels stack down the left edge.
+static float s_na228_panel_y = 0.0f;
 
 static void IncludePerformanceOverlayBounds(const ImVec2& position, const ImVec2& size)
 {
-	if (!s_na228_monitor_enabled)
+	if (!s_na228_monitor_enabled && !s_na228_uj_frame_enabled)
 		return;
 
 	s_performance_overlay_bounds.x = std::min(s_performance_overlay_bounds.x, position.x);
@@ -162,7 +166,9 @@ namespace ImGuiManager
 {
 	static void FormatProcessorStat(SmallStringBase& text, double usage, double time);
 	static void DrawPerformanceOverlay(float& position_y, float scale, float margin, float spacing);
+	static void DrawNA228Panel(const char* id, std::span<const NA228ResourceMonitor::Line> lines, float scale, float margin, float spacing);
 	static void DrawNA228ResourceMonitor(float scale, float margin, float spacing);
+	static void DrawNA228UJFrame(float scale, float margin, float spacing);
 	static void DrawShaderCompileIndicator(float scale, float margin, float spacing);
 	static void DrawSettingsOverlay(float scale, float margin, float spacing);
 	static void DrawInputsOverlay(float scale, float margin, float spacing);
@@ -1875,15 +1881,18 @@ void ImGuiManager::ToggleNA228ResourceMonitor()
 	Host::AddKeyedOSDMessage("NA228ResourceMonitor", message, Host::OSD_QUICK_DURATION);
 }
 
-void ImGuiManager::DrawNA228ResourceMonitor(float scale, float margin, float spacing)
+void ImGuiManager::ToggleNA228UJFrame()
 {
-	if (!s_na228_monitor_enabled)
+	s_na228_uj_frame_enabled = !s_na228_uj_frame_enabled;
+	if (NA228ResourceMonitor::Detect(GetNA228Memory()))
 		return;
 
-	const auto lines = NA228ResourceMonitor::Format(NA228ResourceMonitor::Sample(GetNA228Memory(), s_na228_monitor_history));
-	if (lines.empty())
-		return;
+	const char* message = s_na228_uj_frame_enabled ? "NA228 UJ Frame on: not an NA228 build" : "NA228 UJ Frame off";
+	Host::AddKeyedOSDMessage("NA228UJFrame", message, Host::OSD_QUICK_DURATION);
+}
 
+void ImGuiManager::DrawNA228Panel(const char* id, std::span<const NA228ResourceMonitor::Line> lines, float scale, float margin, float spacing)
+{
 	ImFont* const font = GetOSDFont();
 	const float font_size = GetFontSizeStandard();
 	const float line_height = ImGuiFullscreen::GetLineHeight({font, font_size}) + spacing;
@@ -1892,25 +1901,20 @@ void ImGuiManager::DrawNA228ResourceMonitor(float scale, float margin, float spa
 	for (const auto& line : lines)
 		text_width = std::max(text_width, font->CalcTextSizeA(font_size, FLT_MAX, 0.0f, line.text.c_str()).x);
 
-	float y = margin;
-	if (GSConfig.OsdPerformancePos == OsdOverlayPos::TopLeft && s_performance_overlay_bounds.w > s_performance_overlay_bounds.y)
-	{
-		y = s_performance_overlay_bounds.w + spacing;
-	}
-
-	ImGui::SetNextWindowPos(ImVec2(margin, y));
-	ImGui::SetNextWindowSize(ImVec2(text_width + 2.0f * padding, line_height * static_cast<float>(lines.size()) - spacing + 2.0f * padding));
+	const ImVec2 size(text_width + 2.0f * padding, line_height * static_cast<float>(lines.size()) - spacing + 2.0f * padding);
+	ImGui::SetNextWindowPos(ImVec2(margin, s_na228_panel_y));
+	ImGui::SetNextWindowSize(size);
+	s_na228_panel_y += size.y + spacing;
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.45f));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f * scale);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padding, padding));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-	if (ImGui::Begin("##na228_resource_monitor", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing))
+	if (ImGui::Begin(id, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing))
 	{
 		ImDrawList* const dl = ImGui::GetWindowDrawList();
 		const ImVec2 text_position = ImGui::GetCursorScreenPos();
-		y = text_position.y;
+		float y = text_position.y;
 		const float shadow = std::ceil(scale);
-		// Sampling needs proper testing with live NA228 gameplay; it can miss frame-end pool peaks.
 		for (const auto& line : lines)
 		{
 			const ImU32 color = line.pressure == NA228ResourceMonitor::Pressure::Critical ? IM_COL32(255, 100, 100, 255) :
@@ -1924,6 +1928,30 @@ void ImGuiManager::DrawNA228ResourceMonitor(float scale, float margin, float spa
 	ImGui::End();
 	ImGui::PopStyleVar(3);
 	ImGui::PopStyleColor();
+}
+
+void ImGuiManager::DrawNA228ResourceMonitor(float scale, float margin, float spacing)
+{
+	if (!s_na228_monitor_enabled)
+		return;
+
+	// Sampling needs proper testing with live NA228 gameplay; it can miss frame-end pool peaks.
+	const auto lines = NA228ResourceMonitor::Format(NA228ResourceMonitor::Sample(GetNA228Memory(), s_na228_monitor_history));
+	if (!lines.empty())
+		DrawNA228Panel("##na228_resource_monitor", lines, scale, margin, spacing);
+}
+
+void ImGuiManager::DrawNA228UJFrame(float scale, float margin, float spacing)
+{
+	if (!s_na228_uj_frame_enabled)
+		return;
+
+	std::string text = NA228UJFrame::Format(GetNA228Memory());
+	if (text.empty())
+		return;
+
+	const NA228ResourceMonitor::Line line{std::move(text)};
+	DrawNA228Panel("##na228_uj_frame", {&line, 1}, scale, margin, spacing);
 }
 
 void ImGuiManager::RenderOverlays()
@@ -1940,7 +1968,11 @@ void ImGuiManager::RenderOverlays()
 	s_performance_overlay_bounds = ImVec4(GetWindowWidth(), GetWindowHeight(), 0.0f, 0.0f);
 	if (GSConfig.OsdPerformancePos != OsdOverlayPos::None)
 		DrawPerformanceOverlay(position_y, scale, margin, spacing);
+	s_na228_panel_y = (GSConfig.OsdPerformancePos == OsdOverlayPos::TopLeft && s_performance_overlay_bounds.w > s_performance_overlay_bounds.y) ?
+	                      s_performance_overlay_bounds.w + spacing :
+	                      margin;
 	DrawNA228ResourceMonitor(scale, margin, spacing);
+	DrawNA228UJFrame(scale, margin, spacing);
 	DrawSettingsOverlay(scale, margin, spacing);
 	DrawShaderCompileIndicator(scale, margin, spacing);
 	DrawInputsOverlay(scale, margin, spacing);

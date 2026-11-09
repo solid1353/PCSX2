@@ -88,6 +88,7 @@ set(pcsx2Sources
 	IopMem.cpp
 	PINE.cpp
 	NA228ResourceMonitor.cpp
+	NA228UJFrame.cpp
 	Mdec.cpp
 	Memory.cpp
 	MMI.cpp
@@ -170,6 +171,7 @@ set(pcsx2Headers
 	LayeredSettingsInterface.h
 	PINE.h
 	NA228ResourceMonitor.h
+	NA228UJFrame.h
 	Mdec.h
 	MTGS.h
 	MTVU.h

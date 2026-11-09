@@ -1260,6 +1260,11 @@ BEGIN_HOTKEY_LIST(g_gs_hotkeys){"Screenshot", TRANSLATE_NOOP("Hotkeys", "Graphic
 			if (!pressed)
 				MTGS::RunOnGSThread(&ImGuiManager::ToggleNA228ResourceMonitor);
 		}},
+	{"ToggleNA228UJFrame", TRANSLATE_NOOP("Hotkeys", "Graphics"), TRANSLATE_NOOP("Hotkeys", "Toggle NA228 UJ Frame"),
+		[](s32 pressed) {
+			if (!pressed)
+				MTGS::RunOnGSThread(&ImGuiManager::ToggleNA228UJFrame);
+		}},
 	{"CycleAspectRatio", TRANSLATE_NOOP("Hotkeys", "Graphics"), TRANSLATE_NOOP("Hotkeys", "Cycle Aspect Ratio"),
 		[](s32 pressed) {
 			if (pressed)

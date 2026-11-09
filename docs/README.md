@@ -23,6 +23,11 @@ the game does not see the chord's inputs (`pcsx2/Input/InputManager.cpp`).
 
 Starting a game with a non-default PAL frame rate shows no warning.
 
+The unbound Graphics hotkey Toggle NA228 UJ Frame shows, in an NA228 build, the
+playing Ultimate Jutsu film's frame below the NA228 Resource Monitor: `UJ frame
+2:118` for part 2 of a multi-part film, `UJ frame 118` otherwise, and nothing
+when no film plays (`pcsx2/NA228UJFrame.cpp`).
+
 The toolbar's Settings button always opens Settings, without a menu while a
 game runs (`pcsx2-qt/MainWindow.cpp`).
 

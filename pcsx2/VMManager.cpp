@@ -98,14 +98,6 @@ namespace VMManager
 		{
 			if (const auto dump = request.lock())
 			{
-				// Directories are cleared once the dump is written, so only unfinished dumps are reported.
-				if (!dump->directories.empty() && dump->slot_for_message >= 0)
-				{
-					Host::AddIconOSDMessage(fmt::format("SaveStateGSDump{}", dump->slot_for_message),
-						ICON_FA_TRIANGLE_EXCLAMATION,
-						fmt::format(TRANSLATE_FS("VMManager", "GS dump for slot {} was discarded."), dump->slot_for_message),
-						Host::OSD_QUICK_DURATION);
-				}
 				dump->directories.clear();
 				dump->data.clear();
 			}
@@ -2229,21 +2221,13 @@ static void PublishSaveStateGSDump(VMManager::SaveStateGSDump& request)
 	request.directories.clear();
 	request.data.clear();
 
-	if (!any_attempted || request.slot_for_message < 0 || !VMManager::HasValidVM())
+	// A written dump needs no message of its own: it is written with the state.
+	if (!any_attempted || !any_failed || request.slot_for_message < 0 || !VMManager::HasValidVM())
 		return;
 
-	if (any_failed)
-	{
-		Host::AddIconOSDMessage(fmt::format("SaveStateGSDump{}", request.slot_for_message), ICON_FA_TRIANGLE_EXCLAMATION,
-			fmt::format(TRANSLATE_FS("VMManager", "Failed to save GS dump to slot {}."), request.slot_for_message),
-			Host::OSD_QUICK_DURATION);
-	}
-	else
-	{
-		Host::AddIconOSDMessage(fmt::format("SaveStateGSDump{}", request.slot_for_message), ICON_FA_FLOPPY_DISK,
-			fmt::format(TRANSLATE_FS("VMManager", "Saved GS dump to slot {}."), request.slot_for_message),
-			Host::OSD_QUICK_DURATION);
-	}
+	Host::AddIconOSDMessage(fmt::format("SaveStateGSDump{}", request.slot_for_message), ICON_FA_TRIANGLE_EXCLAMATION,
+		fmt::format(TRANSLATE_FS("VMManager", "Failed to save GS dump to slot {}."), request.slot_for_message),
+		Host::OSD_QUICK_DURATION);
 }
 
 static void QueueSaveStateGSDump(std::shared_ptr<VMManager::SaveStateGSDump> request)

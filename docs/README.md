@@ -86,10 +86,8 @@ It writes raw measurements under `UN_TASK_WORK_ROOT`, uses its existing
 
 A save state's GS dump covers the 4 frames up to the saved frame and is
 written with the state, paused or not ([marker capture](input_recording_capture.md#marker-capture)).
-Saving to a slot then shows "Saved GS dump to slot N." when the dump is
-written, "Failed to save GS dump to slot N." when writing it fails, or "GS dump
-for slot N was discarded." when loading a state, resetting, or closing the game
-drops it before the state is written (`pcsx2/VMManager.cpp`).
+Saving to a slot shows "Failed to save GS dump to slot N." when writing the
+dump fails, and no message of its own when it succeeds (`pcsx2/VMManager.cpp`).
 
 - [Launch options](launch_options.md): command-line options for windows,
   speed, settings, memory cards, PINE, and agent replay.

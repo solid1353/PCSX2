@@ -1355,6 +1355,9 @@
     <ClCompile Include="NA228UJFrame.cpp">
       <Filter>Misc</Filter>
     </ClCompile>
+    <ClCompile Include="NA228Widescreen.cpp">
+      <Filter>Misc</Filter>
+    </ClCompile>
     <ClCompile Include="ImGui\FullscreenUI.cpp">
       <Filter>Misc\ImGui</Filter>
     </ClCompile>
@@ -2320,6 +2323,9 @@
       <Filter>Misc</Filter>
     </ClInclude>
     <ClInclude Include="NA228UJFrame.h">
+      <Filter>Misc</Filter>
+    </ClInclude>
+    <ClInclude Include="NA228Widescreen.h">
       <Filter>Misc</Filter>
     </ClInclude>
     <ClInclude Include="ImGui\FullscreenUI.h">

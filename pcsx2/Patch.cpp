@@ -146,6 +146,7 @@ namespace Patch
 	static std::vector<std::string> s_just_enabled_patches;
 	static u32 s_patches_crc;
 	static std::optional<float> s_override_aspect_ratio;
+	static std::optional<float> s_runtime_aspect_ratio;
 	static std::optional<GSInterlaceMode> s_override_interlace_mode;
 
 	static const PatchTextTable s_patch_commands[] = {
@@ -1025,12 +1026,13 @@ void Patch::UpdateActivePatches(bool reload_enabled_list, bool verbose, bool ver
 void Patch::ApplyPatchSettingOverrides()
 {
 	// Switch to 16:9 (or any custom aspect ratio) if widescreen patches are enabled, and AR is auto.
-	if (s_override_aspect_ratio.has_value() && EmuConfig.GS.AspectRatio == AspectRatioType::RAuto4_3_3_2)
+	const std::optional<float> aspect_ratio = s_override_aspect_ratio.has_value() ? s_override_aspect_ratio : s_runtime_aspect_ratio;
+	if (aspect_ratio.has_value() && EmuConfig.GS.AspectRatio == AspectRatioType::RAuto4_3_3_2)
 	{
-		EmuConfig.CurrentCustomAspectRatio = s_override_aspect_ratio.value();
+		EmuConfig.CurrentCustomAspectRatio = aspect_ratio.value();
 
 		Console.WriteLn(Color_Gray,
-			fmt::format("Patch: Setting aspect ratio to {} by patch request.", s_override_aspect_ratio.value()));
+			fmt::format("Patch: Setting aspect ratio to {} by patch request.", aspect_ratio.value()));
 	}
 
 	// Disable interlacing in GS if active.
@@ -1040,6 +1042,17 @@ void Patch::ApplyPatchSettingOverrides()
 										static_cast<int>(s_override_interlace_mode.value())));
 		EmuConfig.GS.InterlaceMode = s_override_interlace_mode.value();
 	}
+}
+
+void Patch::SetRuntimeAspectRatio(std::optional<float> aspect_ratio)
+{
+	s_runtime_aspect_ratio = aspect_ratio;
+	if (!aspect_ratio.has_value() && !s_override_aspect_ratio.has_value() &&
+		EmuConfig.GS.AspectRatio == AspectRatioType::RAuto4_3_3_2)
+	{
+		EmuConfig.CurrentCustomAspectRatio = 0.0f;
+	}
+	ApplyPatchSettingOverrides();
 }
 
 bool Patch::ReloadPatchAffectingOptions()
@@ -1077,6 +1090,7 @@ void Patch::UnloadPatches()
 {
 	s_override_interlace_mode = {};
 	s_override_aspect_ratio = {};
+	s_runtime_aspect_ratio = {};
 	s_patches_crc = 0;
 	s_active_patches = {};
 	s_active_pnach_dynamic_patches = {};

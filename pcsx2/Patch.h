@@ -194,6 +194,8 @@ namespace Patch
 
 	extern void UpdateActivePatches(bool reload_enabled_list, bool verbose, bool verbose_if_changed, bool apply_new_patches);
 	extern void ApplyPatchSettingOverrides();
+	// Requests an aspect ratio for this run, applied like a patch's gsaspectratio; nullopt withdraws it.
+	extern void SetRuntimeAspectRatio(std::optional<float> aspect_ratio);
 	extern bool ReloadPatchAffectingOptions();
 	extern void UnloadPatches();
 

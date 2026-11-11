@@ -50,6 +50,37 @@ TEST(SaveStateGSDump, FinalizesStreamWhenLastFrameFillsInputBuffer)
 	}
 }
 
+TEST(SaveStateGSDump, RecordedPacketsMatchDirectlyWrittenPackets)
+{
+	u8 state = 0x11;
+	const freezeData fd = {1, &state};
+	const GSPrivRegSet regs = {};
+	const u8 transfer[] = {1, 2, 3};
+	const auto write_packets = [&](GSDumpBase& dump) {
+		dump.Transfer(0, transfer, sizeof(transfer));
+		dump.ReadFIFO(2);
+		dump.VSync(1, false, &regs);
+	};
+
+	std::vector<u8> direct, appended;
+	auto direct_dump = GSDumpBase::CreateZstDump("GS", "", 0, 0, 0, nullptr, fd, &regs,
+		[&](std::vector<u8> data) { direct = std::move(data); });
+	write_packets(*direct_dump);
+	direct_dump->Complete();
+	direct_dump.reset();
+
+	GSDumpPacketRecorder recorder;
+	write_packets(recorder);
+	auto appended_dump = GSDumpBase::CreateZstDump("GS", "", 0, 0, 0, nullptr, fd, &regs,
+		[&](std::vector<u8> data) { appended = std::move(data); });
+	appended_dump->AppendPackets(recorder.GetPackets());
+	appended_dump->Complete();
+	appended_dump.reset();
+
+	ASSERT_FALSE(direct.empty());
+	EXPECT_EQ(appended, direct);
+}
+
 TEST(SaveStateGSDump, DiscardsUnfinishedCapture)
 {
 	u8 state = 0;

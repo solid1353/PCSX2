@@ -2252,10 +2252,17 @@ static void QueueSaveStateGSDump(std::shared_ptr<VMManager::SaveStateGSDump> req
 		return;
 
 	MTGS::RunOnGSThread([request = std::move(request)]() {
-		GSQueueSavestateGSDump([request](std::vector<u8> data) {
+		GSWriteSavestateGSDump([request](std::vector<u8> data) {
 			// Directory operations and publication run on the CPU thread, so a late completion
 			// follows a backup rename and cannot recreate a deleted or replaced savestate.
 			Host::RunOnCPUThread([request, data = std::move(data)]() mutable {
+				// No frame completed since the game started or a state loaded, so there is no dump.
+				if (data.empty())
+				{
+					request->directories.clear();
+					return;
+				}
+
 				request->data = std::move(data);
 				PublishSaveStateGSDump(*request);
 			});

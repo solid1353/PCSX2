@@ -152,6 +152,7 @@ std::string GSState::GetDrawDumpPath(const char* format, ...)
 void GSState::Reset(bool hardware_reset)
 {
 	Flush(GSFlushReason::RESET);
+	m_recent_gs_dump_frames.clear();
 
 	// FIXME: bios logo not shown cut in half after reset, missing graphics in GoW after first FMV
 	memset(&m_path, 0, sizeof(m_path));
@@ -3292,8 +3293,8 @@ void GSState::ReadFIFO(u8* mem, int size)
 
 	if (m_dump)
 		m_dump->ReadFIFO(size / 16);
-	for (const SavestateGSDump& capture : m_savestate_dumps)
-		capture.dump->ReadFIFO(size / 16);
+	if (!m_recent_gs_dump_frames.empty())
+		m_recent_gs_dump_frames.back()->packets.ReadFIFO(size / 16);
 }
 
 void GSState::ReadLocalMemoryUnsync(u8* mem, int qwc, GIFRegBITBLTBUF BITBLTBUF, GIFRegTRXPOS TRXPOS, GIFRegTRXREG TRXREG)
@@ -3522,8 +3523,8 @@ void GSState::Transfer(const u8* mem, u32 size)
 	{
 		if (m_dump)
 			m_dump->Transfer(index, start, mem - start);
-		for (const SavestateGSDump& capture : m_savestate_dumps)
-			capture.dump->Transfer(index, start, mem - start);
+		if (!m_recent_gs_dump_frames.empty())
+			m_recent_gs_dump_frames.back()->packets.Transfer(index, start, mem - start);
 	}
 
 	if (index == 0)
@@ -3647,10 +3648,44 @@ int GSState::Freeze(freezeData* fd, bool sizeonly)
 	return 0;
 }
 
+void GSState::RecordRecentGSDumpFrame(int field)
+{
+	if (!EmuConfig.SaveStateGSDump)
+	{
+		m_recent_gs_dump_frames.clear();
+		return;
+	}
+
+	if (!m_recent_gs_dump_frames.empty())
+		m_recent_gs_dump_frames.back()->packets.VSync(field, false, m_regs);
+
+	std::unique_ptr<RecentGSDumpFrame> frame;
+	if (m_recent_gs_dump_frames.size() > RECENT_GS_DUMP_FRAMES)
+	{
+		frame = std::move(m_recent_gs_dump_frames.front());
+		m_recent_gs_dump_frames.pop_front();
+		frame->packets.Clear();
+	}
+	else
+	{
+		frame = std::make_unique<RecentGSDumpFrame>();
+	}
+
+	freezeData fd = {0, nullptr};
+	Freeze(&fd, true);
+	frame->state.resize(fd.size);
+	fd.data = frame->state.data();
+	Freeze(&fd, false);
+	frame->regs = *m_regs;
+	m_recent_gs_dump_frames.push_back(std::move(frame));
+}
+
 int GSState::Defrost(const freezeData* fd)
 {
 	if (!fd || !fd->data || fd->size == 0)
 		return -1;
+
+	m_recent_gs_dump_frames.clear();
 
 	u8* data = fd->data;
 

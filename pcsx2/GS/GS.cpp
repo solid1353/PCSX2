@@ -492,10 +492,10 @@ void GSStopGSDump()
 		g_gs_renderer->StopGSDump();
 }
 
-void GSQueueSavestateGSDump(std::function<void(std::vector<u8>)> data_callback)
+void GSWriteSavestateGSDump(std::function<void(std::vector<u8>)> data_callback)
 {
 	if (g_gs_renderer)
-		g_gs_renderer->QueueSavestateGSDump(std::move(data_callback));
+		g_gs_renderer->WriteSavestateGSDump(std::move(data_callback));
 }
 
 bool GSBeginCapture(std::string filename)

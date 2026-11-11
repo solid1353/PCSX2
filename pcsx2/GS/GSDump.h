@@ -78,6 +78,8 @@ public:
 	void ReadFIFO(u32 size);
 	void Transfer(int index, const u8* mem, size_t size);
 	bool VSync(int field, bool last, const GSPrivRegSet* regs);
+	// Appends packets that a GSDumpPacketRecorder recorded.
+	void AppendPackets(const std::vector<u8>& packets);
 
 	static std::unique_ptr<GSDumpBase> CreateUncompressedDump(
 		const std::string& fn, const std::string& serial, u32 crc,
@@ -91,4 +93,19 @@ public:
 		const std::string& fn, const std::string& serial, u32 crc,
 		u32 screenshot_width, u32 screenshot_height, const u32* screenshot_pixels,
 		const freezeData& fd, const GSPrivRegSet* regs, DataCallback data_callback = {});
+};
+
+// Records dump packets in memory, without a header, to append to a dump later.
+class GSDumpPacketRecorder final : public GSDumpBase
+{
+	std::vector<u8> m_packets;
+
+	void AppendRawData(const void* data, size_t size) override;
+	void AppendRawData(u8 c) override;
+
+public:
+	GSDumpPacketRecorder();
+
+	const std::vector<u8>& GetPackets() const { return m_packets; }
+	void Clear() { m_packets.clear(); }
 };

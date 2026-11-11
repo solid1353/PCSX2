@@ -8,11 +8,14 @@
 #include "GS/GSLocalMemory.h"
 #include "GS/GSDrawingContext.h"
 #include "GS/GSDrawingEnvironment.h"
+#include "GS/GSDump.h"
 #include "GS/Renderers/Common/GSVertex.h"
 #include "GS/Renderers/Common/GSVertexTrace.h"
 #include "GS/Renderers/Common/GSDevice.h"
 #include "GS/GSVector.h"
 #include "GSAlignedClass.h"
+
+#include <deque>
 
 class GSDumpBase;
 
@@ -290,12 +293,18 @@ public:
 	GSDrawingContext* m_context = nullptr;
 	GSVector4i temp_draw_rect;
 	std::unique_ptr<GSDumpBase> m_dump;
-	struct SavestateGSDump
+	// The GS state at a VSync and the packets of the frame that follows it.
+	struct RecentGSDumpFrame
 	{
-		std::unique_ptr<GSDumpBase> dump;
-		u32 frames_remaining = 4;
+		std::vector<u8> state;
+		GSPrivRegSet regs = {};
+		GSDumpPacketRecorder packets;
 	};
-	std::vector<SavestateGSDump> m_savestate_dumps;
+	static constexpr size_t RECENT_GS_DUMP_FRAMES = 4;
+	// While SaveStateGSDump is on, the last RECENT_GS_DUMP_FRAMES completed frames and the frame in progress,
+	// oldest first, so a savestate's GS dump ends on the saved frame.
+	std::deque<std::unique_ptr<RecentGSDumpFrame>> m_recent_gs_dump_frames;
+	void RecordRecentGSDumpFrame(int field);
 	bool m_scissor_invalid = false;
 	bool m_quad_check_valid = false;
 	bool m_quad_check_valid_shuffle = false;

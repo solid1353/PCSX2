@@ -66,8 +66,6 @@ GSRenderer::~GSRenderer() = default;
 
 void GSRenderer::Reset(bool hardware_reset)
 {
-	m_savestate_dumps.clear();
-
 	// Clear the current display texture.
 	if (hardware_reset)
 		g_gs_device->ClearCurrent();
@@ -722,16 +720,7 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 		PerformanceMetrics::Update(registers_written, fb_sprite_frame, false);
 	}
 
-	// Savestate captures run independently so overlapping saves and hotkey dumps are preserved.
-	std::erase_if(m_savestate_dumps, [this, field](SavestateGSDump& capture) {
-		const bool done = capture.dump->VSync(field, false, m_regs);
-		if (--capture.frames_remaining == 0)
-		{
-			capture.dump->Complete();
-			return true;
-		}
-		return done;
-	});
+	RecordRecentGSDumpFrame(field);
 
 	// snapshot
 	if (!m_snapshot.empty())
@@ -882,24 +871,27 @@ void GSRenderer::SaveScreenshot()
 	m_dump_filename.clear();
 }
 
-void GSRenderer::QueueSavestateGSDump(std::function<void(std::vector<u8>)> data_callback)
+void GSRenderer::WriteSavestateGSDump(std::function<void(std::vector<u8>)> data_callback)
 {
-	if (GSConfig.UserHacks_ReadTCOnClose)
-		ReadbackTextureCache();
-
-	freezeData fd = {0, nullptr};
-	Freeze(&fd, true);
-	std::vector<u8> state(fd.size);
-	fd.data = state.data();
-	Freeze(&fd, false);
+	// The oldest kept frame's state starts the dump, and the completed frames' packets follow it,
+	// so the dump ends on the last presented frame. Nothing is written before a frame completes.
+	if (m_recent_gs_dump_frames.size() < 2)
+	{
+		data_callback({});
+		return;
+	}
 
 	u32 screenshot_width = 0, screenshot_height = 0;
 	std::vector<u32> screenshot_pixels;
 	SaveSnapshotToMemory(640, 480, true, false, &screenshot_width, &screenshot_height, &screenshot_pixels);
-	// Buffer compressed output until all four frames complete; this needs proper testing during replay.
-	m_savestate_dumps.push_back({GSDumpBase::CreateZstDump("GS", VMManager::GetDiscSerial(),
+	const RecentGSDumpFrame& first = *m_recent_gs_dump_frames.front();
+	const freezeData fd = {static_cast<int>(first.state.size()), const_cast<u8*>(first.state.data())};
+	std::unique_ptr<GSDumpBase> dump = GSDumpBase::CreateZstDump("GS", VMManager::GetDiscSerial(),
 		VMManager::GetDiscCRC(), screenshot_width, screenshot_height,
-		screenshot_pixels.empty() ? nullptr : screenshot_pixels.data(), fd, m_regs, std::move(data_callback))});
+		screenshot_pixels.empty() ? nullptr : screenshot_pixels.data(), fd, &first.regs, std::move(data_callback));
+	for (size_t i = 0; i + 1 < m_recent_gs_dump_frames.size(); i++)
+		dump->AppendPackets(m_recent_gs_dump_frames[i]->packets.GetPackets());
+	dump->Complete();
 }
 
 static std::string GSGetBaseFilename()

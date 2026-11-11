@@ -23,7 +23,7 @@ GSDumpBase::GSDumpBase(std::string fn, DataCallback data_callback)
 	, m_extra_frames(2)
 	, m_data_callback(std::move(data_callback))
 {
-	if (!m_data_callback)
+	if (!m_data_callback && !m_filename.empty())
 	{
 		m_gs = FileSystem::OpenCFile(m_filename.c_str(), "wb");
 		if (!m_gs)
@@ -114,6 +114,28 @@ bool GSDumpBase::VSync(int field, bool last, const GSPrivRegSet* regs)
 		m_extra_frames--;
 
 	return (++m_frames & 1) == 0 && last && (m_extra_frames < 0);
+}
+
+void GSDumpBase::AppendPackets(const std::vector<u8>& packets)
+{
+	if (!packets.empty())
+		AppendRawData(packets.data(), packets.size());
+}
+
+GSDumpPacketRecorder::GSDumpPacketRecorder()
+	: GSDumpBase({})
+{
+}
+
+void GSDumpPacketRecorder::AppendRawData(const void* data, size_t size)
+{
+	const u8* bytes = static_cast<const u8*>(data);
+	m_packets.insert(m_packets.end(), bytes, bytes + size);
+}
+
+void GSDumpPacketRecorder::AppendRawData(u8 c)
+{
+	m_packets.push_back(c);
 }
 
 void GSDumpBase::Write(const void* data, size_t size)

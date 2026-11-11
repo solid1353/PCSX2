@@ -2410,6 +2410,7 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				s_batch_mode = true;
 				s_nogui_mode = true;
 				s_surfaceless_mode = true;
+				InputManager::SetPhysicalInputDisabled(true);
 				continue;
 			}
 			else if (CHECK_ARG(QStringLiteral("-agent-replay")))
@@ -2418,6 +2419,7 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				s_batch_mode = true;
 				s_nogui_mode = true;
 				s_surfaceless_mode = true;
+				InputManager::SetPhysicalInputDisabled(true);
 				VMManager::Internal::SetOutputMutedOverride(true);
 				VMManager::Internal::SetPINEEnabledOverride(true);
 				INISettingsInterface::SetSaveSuppressed(true);

@@ -258,3 +258,15 @@ TEST(DualShock2Deadzone, KeepsDeflectionsPastTheDeadzone)
 	pad.Set(PadDualshock2::Inputs::PAD_L_LEFT, 0.5f);
 	EXPECT_LT(pad.GetEffectiveInput(PadDualshock2::Inputs::PAD_L_LEFT), 0.0f);
 }
+
+TEST(InputSources, PhysicalInputDisabledOverridesSettings)
+{
+	MemorySettingsInterface si;
+	si.SetBoolValue("InputSources", "SDL", true);
+	EXPECT_TRUE(InputManager::IsInputSourceEnabled(si, InputSourceType::SDL));
+
+	InputManager::SetPhysicalInputDisabled(true);
+	EXPECT_FALSE(InputManager::IsInputSourceEnabled(si, InputSourceType::SDL));
+	InputManager::SetPhysicalInputDisabled(false);
+	EXPECT_TRUE(InputManager::IsInputSourceEnabled(si, InputSourceType::SDL));
+}

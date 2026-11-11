@@ -12,7 +12,7 @@ Input recording options are described in
 
 | Option | Effect |
 | --- | --- |
-| `-surfaceless` | Runs without creating or activating any window; implies `-nogui` and batch mode. |
+| `-surfaceless` | Runs without creating or activating any window; implies `-nogui` and batch mode. It opens no controllers, so physical controllers and their hotkeys do not reach it; only PINE and input recordings drive it. |
 | `-mute` | Mutes audio output. |
 | `-read-only-settings` | Prevents every settings INI write. |
 | `-pine-port <port>` | Uses PINE slot `1024` through `65535` when PINE is enabled. |

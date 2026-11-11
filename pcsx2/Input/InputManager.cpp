@@ -134,6 +134,7 @@ namespace InputManager
 using BindingMap = std::unordered_multimap<InputBindingKey, std::shared_ptr<InputBinding>, InputBindingKeyHash>;
 using VibrationBindingArray = std::vector<PadVibrationBinding>;
 static BindingMap s_binding_map;
+static bool s_physical_input_disabled = false;
 static VibrationBindingArray s_pad_vibration_array;
 static std::mutex s_binding_map_write_lock;
 
@@ -2003,8 +2004,16 @@ InputManager::GenericInputBindingMapping InputManager::GetGenericBindingMapping(
 	return mapping;
 }
 
+void InputManager::SetPhysicalInputDisabled(bool disabled)
+{
+	s_physical_input_disabled = disabled;
+}
+
 bool InputManager::IsInputSourceEnabled(SettingsInterface& si, InputSourceType type)
 {
+	if (s_physical_input_disabled)
+		return false;
+
 	return si.GetBoolValue("InputSources", InputManager::InputSourceToString(type), InputManager::GetInputSourceDefaultEnabled(type));
 }
 

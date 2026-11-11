@@ -252,6 +252,9 @@ namespace InputManager
 	/// Returns whether a given input source is enabled.
 	bool IsInputSourceEnabled(SettingsInterface& si, InputSourceType type);
 
+	/// Disables every physical input source (SDL, XInput, DInput) for this process, whatever the settings say.
+	void SetPhysicalInputDisabled(bool disabled);
+
 	/// Re-parses the config and registers all hotkey and pad bindings.
 	void ReloadBindings(SettingsInterface& si, SettingsInterface& binding_si, SettingsInterface& hotkey_binding_si, bool is_binding_profile, bool is_hotkey_profile);
 

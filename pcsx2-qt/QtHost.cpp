@@ -2215,6 +2215,7 @@ DEFINE_GAME_LIST_HOTKEY("GameListRescan", TRANSLATE_NOOP("Hotkeys", "Rescan All 
 DEFINE_GAME_LIST_HOTKEY("GameListSearch", TRANSLATE_NOOP("Hotkeys", "Search"), "Keyboard/Control & Keyboard/F")
 DEFINE_GAME_LIST_HOTKEY("GameListRename", TRANSLATE_NOOP("Hotkeys", "Rename File"), "Keyboard/F2")
 DEFINE_GAME_LIST_HOTKEY("GameListDelete", TRANSLATE_NOOP("Hotkeys", "Delete File"), "Keyboard/Delete")
+DEFINE_GAME_LIST_HOTKEY("GameListCopyFileName", TRANSLATE_NOOP("Hotkeys", "Copy File Name"), "Keyboard/Control & Keyboard/C")
 DEFINE_GAME_LIST_HOTKEY("GameListZoomIn", TRANSLATE_NOOP("Hotkeys", "Zoom In (Grid View)"), "Keyboard/Control & Keyboard/Plus")
 DEFINE_GAME_LIST_HOTKEY("GameListZoomOut", TRANSLATE_NOOP("Hotkeys", "Zoom Out (Grid View)"), "Keyboard/Control & Keyboard/Minus")
 #undef DEFINE_GAME_LIST_HOTKEY

@@ -56,6 +56,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QMimeData>
+#include <QtGui/QClipboard>
 #include <QtGui/QCloseEvent>
 #include <QtGui/QDrag>
 #include <QtGui/QDragEnterEvent>
@@ -1051,6 +1052,7 @@ void MainWindow::connectSignals()
 	connect(m_game_list_widget, &GameListWidget::entryDeleteRequested, this, [this](const QString& path) {
 		if (!isGameListFileInUse(path))
 			deleteGameListEntryFile(path); }, Qt::QueuedConnection);
+	connect(m_game_list_widget, &GameListWidget::entryCopyFileNameRequested, this, &MainWindow::copyGameListEntryFileName);
 	connect(m_game_list_widget, &GameListWidget::addGameDirectoryRequested, this,
 		[this]() { getSettingsWindow()->getGameListSettingsWidget()->addSearchDirectory(this); });
 
@@ -2306,6 +2308,9 @@ void MainWindow::onGameListEntryContextMenuRequested(const QPoint& point)
 		action = menu.addAction(tr("Delete..."));
 		action->setEnabled(!file_in_use);
 		connect(action, &QAction::triggered, [this, file_path]() { deleteGameListEntryFile(file_path); });
+
+		connect(menu.addAction(tr("Copy File Name")), &QAction::triggered,
+			[this, file_path]() { copyGameListEntryFileName(file_path); });
 
 		const time_t entry_played_time = GameList::GetCachedPlayedTimeForSerial(entry->serial, entry->crc);
 		// Best two options given zero play time are to grey this out or to not show it at all.
@@ -3991,6 +3996,11 @@ void MainWindow::setGameListEntryCoverImage(const GameList::Entry& entry)
 	}
 
 	m_game_list_widget->refreshGridCovers();
+}
+
+void MainWindow::copyGameListEntryFileName(const QString& path)
+{
+	QGuiApplication::clipboard()->setText(QFileInfo(path).fileName());
 }
 
 void MainWindow::renameGameListEntryFile(const QString& path)

@@ -23,6 +23,9 @@ the game does not see the chord's inputs (`pcsx2/Input/InputManager.cpp`).
 
 Starting a game with a non-default PAL frame rate shows no warning.
 
+The game list's Copy File Name context menu item and hotkey (default Ctrl+C)
+copy the selected entry's file name, with its extension, to the clipboard.
+
 The unbound Graphics hotkey Toggle NA228 UJ Frame shows, in an NA228 build, the
 playing Ultimate Jutsu film's frame below the NA228 Resource Monitor: `UJ frame
 2:118` for part 2 of a multi-part film, `UJ frame 118` otherwise, and nothing

@@ -387,6 +387,11 @@ void GameListWidget::initialize()
 			const std::optional<GameList::Entry> entry = getSelectedEntry();
 			if (entry.has_value())
 				emit entryDeleteRequested(QString::fromStdString(entry->path)); });
+
+		add_shortcut("GameListCopyFileName", view, [this]() {
+			const std::optional<GameList::Entry> entry = getSelectedEntry();
+			if (entry.has_value())
+				emit entryCopyFileNameRequested(QString::fromStdString(entry->path)); });
 	}
 
 	m_empty_widget = new QWidget(m_ui.stack);

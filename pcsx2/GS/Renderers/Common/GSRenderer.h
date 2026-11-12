@@ -19,6 +19,8 @@ private:
 	u64 m_shader_time_start = 0;
 
 	std::string m_snapshot;
+	// Set for a screenshot written as PNG at exactly m_snapshot + ".png"; told whether it was written.
+	std::function<void(bool)> m_snapshot_callback;
 	std::string m_dump_filename;
 	u32 m_dump_frames = 0;
 	u32 m_skipped_duplicate_frames = 0;
@@ -58,7 +60,7 @@ public:
 	bool SaveSnapshotToMemory(u32 window_width, u32 window_height, bool apply_aspect, bool crop_borders,
 		u32* width, u32* height, std::vector<u32>* pixels);
 
-	void QueueSnapshot(const std::string& path, const u32 gsdump_frames);
+	void QueueSnapshot(const std::string& path, const u32 gsdump_frames, std::function<void(bool)> callback = {});
 	void WriteSavestateGSDump(std::function<void(std::vector<u8>)> data_callback);
 	void StopGSDump();
 	void PresentCurrentFrame();

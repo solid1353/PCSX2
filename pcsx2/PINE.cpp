@@ -1230,6 +1230,7 @@ namespace PINEServer
 		MsgReplayScreenshot = static_cast<u8>(ReplayAnalysis::Opcode::Screenshot), /**< Saves a paused replay screenshot to an exact path. */
 		MsgReplayShutdown = static_cast<u8>(ReplayAnalysis::Opcode::Shutdown), /**< Gracefully shuts down a paused read-only replay. */
 		MsgReplayGSDump = static_cast<u8>(ReplayAnalysis::Opcode::GSDump), /**< Queues a GS dump from a paused read-only replay. */
+		MsgScreenshotToFile = 0x1F, /**< Saves the next presented frame as PNG to an exact path. */
 		MsgUnimplemented = 0xFF /**< Unimplemented IPC message. */
 	};
 
@@ -1579,6 +1580,41 @@ void PINEServer::Deinitialize()
 
 	if (s_thread.joinable())
 		s_thread.join();
+}
+
+// Writes the next presented frame, or the current one while paused, to an exact PNG path and waits until it is
+// written. A VM that stops before presenting a frame never reports back, so the wait gives up after 30 seconds.
+static bool SaveScreenshotToFileFromServer(std::string path)
+{
+	struct Result
+	{
+		std::mutex mutex;
+		std::condition_variable written;
+		std::optional<bool> saved;
+	};
+	const std::shared_ptr<Result> result = std::make_shared<Result>();
+	const auto complete = [result](bool saved) {
+		std::unique_lock lock(result->mutex);
+		result->saved = saved;
+		result->written.notify_all();
+	};
+
+	bool queued = false;
+	Host::RunOnCPUThread(
+		[&path, &complete, &queued]() {
+			if (!VMManager::HasValidVM())
+				return;
+
+			MTGS::RunOnGSThread([path = std::move(path), complete]() { GSQueueSnapshotToFile(path, complete); });
+			queued = true;
+		},
+		true);
+	if (!queued)
+		return false;
+
+	std::unique_lock lock(result->mutex);
+	return result->written.wait_for(lock, std::chrono::seconds(30), [&result]() { return result->saved.has_value(); }) &&
+	       *result->saved;
 }
 
 PINEServer::IPCBuffer PINEServer::ParseCommand(std::span<u8> buf, std::vector<u8>& ret_buffer, u32 buf_size)
@@ -2059,6 +2095,22 @@ PINEServer::IPCBuffer PINEServer::ParseCommand(std::span<u8> buf, std::vector<u8
 					ReplayAnalysis::ParseScreenshotRequest(buf.subspan(buf_cnt, buf_size - buf_cnt));
 				if (!request.has_value() || !SafetyChecks(buf_cnt, static_cast<int>(request->bytes_consumed), ret_cnt, 1, buf_size) ||
 					!ReplayAnalysis::SaveScreenshotFromServer(request->path))
+				{
+					goto error;
+				}
+
+				buf_cnt += static_cast<u32>(request->bytes_consumed);
+				ToResultVector(ret_buffer, ReplayAnalysis::PROTOCOL_VERSION, ret_cnt);
+				ret_cnt++;
+				break;
+			}
+			case MsgScreenshotToFile:
+			{
+				const std::optional<ReplayAnalysis::ParsedScreenshotRequest> request =
+					ReplayAnalysis::ParseScreenshotRequest(buf.subspan(buf_cnt, buf_size - buf_cnt));
+				if (!request.has_value() || !StringUtil::EndsWithNoCase(request->path, ".png") ||
+					!SafetyChecks(buf_cnt, static_cast<int>(request->bytes_consumed), ret_cnt, 1, buf_size) ||
+					!SaveScreenshotToFileFromServer(request->path))
 				{
 					goto error;
 				}

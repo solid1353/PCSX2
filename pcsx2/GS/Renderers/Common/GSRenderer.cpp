@@ -468,7 +468,15 @@ static const char* GetScreenshotSuffix()
 	return suffixes[static_cast<u8>(GSConfig.ScreenshotFormat)];
 }
 
-static void CompressAndWriteScreenshot(std::string filename, u32 width, u32 height, std::vector<u32> pixels)
+static int GetScreenshotQuality()
+{
+	return (GSConfig.ScreenshotFormat == GSScreenshotFormat::PNG)  ? GSConfig.ScreenshotPNGCompression * 10 :
+	       (GSConfig.ScreenshotFormat == GSScreenshotFormat::JPEG) ? GSConfig.ScreenshotJPEGQuality :
+	                                                                 GSConfig.ScreenshotWebPQuality;
+}
+
+static void CompressAndWriteScreenshot(std::string filename, u32 width, u32 height, std::vector<u32> pixels,
+	int quality, std::function<void(bool)> callback = {})
 {
 	RGBA8Image image;
 	image.SetPixels(width, height, std::move(pixels));
@@ -483,12 +491,12 @@ static void CompressAndWriteScreenshot(std::string filename, u32 width, u32 heig
 
 	// maybe std::async would be better here.. but it's definitely worth threading, large screenshots take a while to compress.
 	std::unique_lock lock(s_screenshot_threads_mutex);
-	const int quality = (GSConfig.ScreenshotFormat == GSScreenshotFormat::PNG)  ? GSConfig.ScreenshotPNGCompression * 10 :
-	                    (GSConfig.ScreenshotFormat == GSScreenshotFormat::JPEG) ? GSConfig.ScreenshotJPEGQuality :
-	                                                                              GSConfig.ScreenshotWebPQuality;
 	s_screenshot_threads.emplace_back([key = std::move(key), filename = std::move(filename), image = std::move(image),
-										  quality]() {
-		if (image.SaveToFile(filename.c_str(), quality))
+										  quality, callback = std::move(callback)]() {
+		const bool saved = image.SaveToFile(filename.c_str(), quality);
+		if (callback)
+			callback(saved);
+		if (saved)
 		{
 			if (!GSDumpReplayer::IsRunner())
 			{
@@ -833,10 +841,14 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 
 static std::string GSGetSnapshotDirectory(const std::string& root);
 
-void GSRenderer::QueueSnapshot(const std::string& path, const u32 gsdump_frames)
+void GSRenderer::QueueSnapshot(const std::string& path, const u32 gsdump_frames, std::function<void(bool)> callback)
 {
 	if (!m_snapshot.empty())
+	{
+		if (callback)
+			callback(false);
 		return;
+	}
 
 	// Allows for providing a complete path
 	const bool explicit_path = (path.size() > 4 && StringUtil::EndsWithNoCase(path, ".png"));
@@ -850,22 +862,37 @@ void GSRenderer::QueueSnapshot(const std::string& path, const u32 gsdump_frames)
 			Path::Combine(GSGetSnapshotDirectory(EmuFolders::GSDumps), Path::GetFileName(m_snapshot));
 
 	m_dump_frames = gsdump_frames;
+	m_snapshot_callback = std::move(callback);
 	if (gsdump_frames == 0 && VMManager::GetState() == VMState::Paused)
 		SaveScreenshot();
 }
 
 void GSRenderer::SaveScreenshot()
 {
+	std::function<void(bool)> callback = std::move(m_snapshot_callback);
+	m_snapshot_callback = {};
 	u32 width = 0, height = 0;
 	std::vector<u32> pixels;
 	if (SaveSnapshotToMemory(&width, &height, &pixels))
 	{
-		CompressAndWriteScreenshot(fmt::format("{}.{}", m_snapshot, GetScreenshotSuffix()), width, height, std::move(pixels));
+		// A screenshot with a callback is always a PNG at its exact path.
+		if (callback)
+		{
+			CompressAndWriteScreenshot(fmt::format("{}.png", m_snapshot), width, height, std::move(pixels),
+				GSConfig.ScreenshotPNGCompression * 10, std::move(callback));
+		}
+		else
+		{
+			CompressAndWriteScreenshot(fmt::format("{}.{}", m_snapshot, GetScreenshotSuffix()), width, height,
+				std::move(pixels), GetScreenshotQuality());
+		}
 	}
 	else
 	{
 		Host::AddIconOSDMessage("GSScreenshot", ICON_FA_CAMERA,
 			TRANSLATE_SV("GS", "Failed to render/download screenshot."), Host::OSD_ERROR_DURATION);
+		if (callback)
+			callback(false);
 	}
 	m_snapshot.clear();
 	m_dump_filename.clear();
@@ -989,6 +1016,9 @@ std::string GSGetBaseVideoFilename()
 
 void GSRenderer::StopGSDump()
 {
+	if (m_snapshot_callback)
+		m_snapshot_callback(false);
+	m_snapshot_callback = {};
 	m_snapshot = {};
 	m_dump_filename.clear();
 	m_dump_frames = 0;

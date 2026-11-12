@@ -76,6 +76,9 @@ int GSfreeze(FreezeAction mode, freezeData* data);
 std::string GSGetBaseSnapshotFilename();
 std::string GSGetBaseVideoFilename();
 void GSQueueSnapshot(const std::string& path, u32 gsdump_frames = 0);
+// Writes the next presented frame, or the current one while paused, as PNG at an exact path ending in .png,
+// then calls back with whether it was written.
+void GSQueueSnapshotToFile(const std::string& path, std::function<void(bool)> callback);
 void GSWriteSavestateGSDump(std::function<void(std::vector<u8>)> data_callback);
 void GSStopGSDump();
 bool GSBeginCapture(std::string filename);

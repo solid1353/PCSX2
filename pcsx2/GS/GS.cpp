@@ -486,6 +486,14 @@ void GSQueueSnapshot(const std::string& path, u32 gsdump_frames)
 		g_gs_renderer->QueueSnapshot(path, gsdump_frames);
 }
 
+void GSQueueSnapshotToFile(const std::string& path, std::function<void(bool)> callback)
+{
+	if (g_gs_renderer)
+		g_gs_renderer->QueueSnapshot(path, 0, std::move(callback));
+	else
+		callback(false);
+}
+
 void GSStopGSDump()
 {
 	if (g_gs_renderer)

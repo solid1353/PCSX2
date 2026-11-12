@@ -1,6 +1,6 @@
 # PINE agent control
 
-The fork extends PINE protocol version 1 with opcodes `0x10` through `0x1E`.
+The fork extends PINE protocol version 1 with opcodes `0x10` through `0x1F`.
 Opcodes `0x00` through `0x0F` keep their upstream meaning. The server is in
 `pcsx2/PINE.cpp` and `pcsx2/PINE.h`.
 
@@ -32,12 +32,20 @@ Each of these opcodes fails when no VM is running.
 | `0x13` | none | none | Resumes the VM, then replies. |
 | `0x14` | none | none | Clears CPU execution caches, then replies. |
 | `0x15` | `u8 pad, u8 button, u16 milliseconds` | none | Presses one DualShock 2 button, waits on the PINE thread, then releases it. |
+| `0x1F` | `u8 1`, `u32 length`, path bytes | `u8 1` | Saves a screenshot as PNG to an exact path, then replies once the file is written. |
 
 For `0x15`, `pad` is a unified slot (see [pad slots](#pad-slots)) holding a
 DualShock 2, `milliseconds` is `1` through `1000`, and `button` is a digital
 input in this order: Up `0`, Right `1`, Down `2`, Left `3`, Triangle `4`,
 Circle `5`, Cross `6`, Square `7`, Select `8`, Start `9`, L1 `10`, L2 `11`,
 R1 `12`, R2 `13`, L3 `14`, R3 `15`.
+
+`0x1F` takes an absolute path of 1 through 32,768 bytes, without NUL characters,
+ending in `.png` (case-insensitive), and needs no replay or pause. It captures
+the next presented frame, or the current frame while paused, at the size and PNG
+compression of ordinary screenshots, and replies only after the file is written.
+It fails on an invalid path, while another screenshot is pending, when the image
+cannot be rendered or written, or when no frame is presented within 30 seconds.
 
 ## Agent input opcodes
 

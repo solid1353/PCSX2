@@ -757,6 +757,14 @@ bool SDLInputSource::InitializeSubsystem()
 	// we should open the controllers as the connected events come in, so no need to do any more here
 	m_sdl_subsystem_initialized = true;
 
+	m_startup_joysticks.clear();
+	int joystick_count = 0;
+	if (SDL_JoystickID* joysticks = SDL_GetJoysticks(&joystick_count))
+	{
+		m_startup_joysticks.assign(joysticks, joysticks + joystick_count);
+		SDL_free(joysticks);
+	}
+
 	int count;
 	char** mappings = SDL_GetGamepadMappings(&count);
 	if (mappings != nullptr)
@@ -1534,7 +1542,12 @@ bool SDLInputSource::OpenDevice(SDL_JoystickID index, bool is_gamepad)
 		}
 	}
 
-	InputManager::OnInputDeviceConnected(fmt::format("SDL-{}", player_id), name);
+	const auto startup_joystick = std::find(m_startup_joysticks.begin(), m_startup_joysticks.end(), index);
+	const bool present_at_startup = startup_joystick != m_startup_joysticks.end();
+	if (present_at_startup)
+		m_startup_joysticks.erase(startup_joystick);
+
+	InputManager::OnInputDeviceConnected(fmt::format("SDL-{}", player_id), name, !present_at_startup);
 	return true;
 }
 

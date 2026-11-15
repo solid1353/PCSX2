@@ -83,7 +83,7 @@ std::optional<WindowInfo> Host::GetTopLevelWindowInfo()
 	return std::nullopt;
 }
 
-void Host::OnInputDeviceConnected(const std::string_view identifier, const std::string_view device_name)
+void Host::OnInputDeviceConnected(const std::string_view identifier, const std::string_view device_name, bool announce)
 {
 }
 

@@ -319,8 +319,9 @@ namespace InputManager
 	/// Updates host mouse mode (relative/cursor hiding).
 	void UpdateHostMouseMode();
 
-	/// Called when a new input device is connected.
-	void OnInputDeviceConnected(const std::string_view identifier, const std::string_view device_name);
+	/// Called when a new input device is connected. A device that was already present when its source started is not
+	/// announced.
+	void OnInputDeviceConnected(const std::string_view identifier, const std::string_view device_name, bool announce = true);
 
 	/// Called when an input device is disconnected.
 	void OnInputDeviceDisconnected(const InputBindingKey key, const std::string_view identifier);
@@ -331,8 +332,8 @@ namespace Host
 	/// Return the current window handle. Needed for DInput.
 	std::optional<WindowInfo> GetTopLevelWindowInfo();
 
-	/// Called when a new input device is connected.
-	void OnInputDeviceConnected(const std::string_view identifier, const std::string_view device_name);
+	/// Called when a new input device is connected; announce shows that it connected.
+	void OnInputDeviceConnected(const std::string_view identifier, const std::string_view device_name, bool announce);
 
 	/// Called when an input device is disconnected.
 	void OnInputDeviceDisconnected(const InputBindingKey key, const std::string_view identifier);

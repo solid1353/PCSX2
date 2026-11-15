@@ -101,6 +101,9 @@ private:
 
 	std::vector<u32> m_gamepads_needing_migration;
 
+	// Devices already present when the subsystem started; SDL reports them as added on the first poll.
+	std::vector<SDL_JoystickID> m_startup_joysticks;
+
 	std::array<u32, MAX_LED_COLORS> m_led_colors{};
 	std::vector<std::pair<std::string, std::string>> m_sdl_hints;
 

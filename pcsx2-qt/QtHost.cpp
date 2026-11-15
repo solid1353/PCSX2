@@ -1896,13 +1896,13 @@ std::optional<WindowInfo> Host::GetTopLevelWindowInfo()
 	return ret;
 }
 
-void Host::OnInputDeviceConnected(const std::string_view identifier, const std::string_view device_name)
+void Host::OnInputDeviceConnected(const std::string_view identifier, const std::string_view device_name, bool announce)
 {
 	emit g_emu_thread->onInputDeviceConnected(identifier.empty() ? QString() : QString::fromUtf8(identifier.data(), identifier.size()),
 		device_name.empty() ? QString() : QString::fromUtf8(device_name.data(), device_name.size()));
 
 
-	if (VMManager::HasValidVM() || g_emu_thread->isRunningFullscreenUI())
+	if (announce && (VMManager::HasValidVM() || g_emu_thread->isRunningFullscreenUI()))
 	{
 		Host::AddIconOSDMessage(fmt::format("controller_connected_{}", identifier), ICON_FA_GAMEPAD,
 			fmt::format(TRANSLATE_FS("QtHost", "Controller {} connected."), identifier),

@@ -863,7 +863,7 @@ void EmuThread::requestCenteredDisplaySize(bool game_list)
 	if (!game_list && !VMManager::HasValidVM())
 		return;
 
-	const float present_aspect_ratio = VMManager::HasValidVM() ? GSGetPresentAspectRatio() : 4.0f / 3.0f;
+	const float present_aspect_ratio = VMManager::HasValidVM() ? GSGetPresentAspectRatio() : 16.0f / 9.0f;
 	if (present_aspect_ratio <= 0.0f)
 		return;
 

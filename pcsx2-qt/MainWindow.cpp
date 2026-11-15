@@ -110,7 +110,6 @@ MainWindow* g_main_window = nullptr;
 // UI thread VM validity.
 static bool s_vm_valid = false;
 static bool s_vm_paused = false;
-static constexpr int RECENTER_FRAME_WIDTH = 1024;
 static constexpr int RECENTER_FRAME_HEIGHT = 768;
 static QString s_current_title;
 static QString s_current_elf_override;
@@ -127,16 +126,9 @@ static constexpr const char* TOOLBAR_ACTION_MIME_TYPE = "application/x-pcsx2-too
 static QSize getCenteredContentSize(float aspect_ratio, const QSize& frame_size,
 	const QSize& window_size, const QSize& chrome_size)
 {
-	const QSize maximum_size = QSize(RECENTER_FRAME_WIDTH, RECENTER_FRAME_HEIGHT) - (frame_size - window_size) - chrome_size;
-	const int maximum_width = std::max(maximum_size.width(), 1);
-	const int maximum_height = std::max(maximum_size.height(), 1);
-	int width = maximum_width;
-	int height = std::max(static_cast<int>(std::lroundf(static_cast<float>(width) / aspect_ratio)), 1);
-	if (height > maximum_height)
-	{
-		height = maximum_height;
-		width = std::max(static_cast<int>(std::lroundf(static_cast<float>(height) * aspect_ratio)), 1);
-	}
+	// Every aspect ratio gets the frame's full height, so wider images make wider windows.
+	const int height = std::max(RECENTER_FRAME_HEIGHT - (frame_size.height() - window_size.height()) - chrome_size.height(), 1);
+	const int width = std::max(static_cast<int>(std::lroundf(static_cast<float>(height) * aspect_ratio)), 1);
 	return QSize(width, height);
 }
 

@@ -3743,11 +3743,6 @@ void VMManager::WarnAboutUnsafeSettings()
 
 	if (EmuConfig.Speedhacks.fastCDVD)
 		append(ICON_FA_COMPACT_DISC, TRANSLATE_SV("VMManager", "Fast CDVD is enabled, this may break games."));
-	if (EmuConfig.Speedhacks.EECycleRate != 0 || EmuConfig.Speedhacks.EECycleSkip != 0)
-	{
-		append(ICON_FA_GAUGE_SIMPLE_HIGH,
-			TRANSLATE_SV("VMManager", "Cycle rate/skip is not at default, this may crash or make games run too slow."));
-	}
 
 	const bool is_sw_renderer = EmuConfig.GS.Renderer == GSRendererType::SW;
 	if (!is_sw_renderer)

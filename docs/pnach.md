@@ -40,10 +40,9 @@ applies to every CRC, and a malformed list makes the section apply to none.
 
 `-pnach <path>` loads an existing PNACH file. The option may be repeated, and
 files load in command-line order. When any `-pnach` file is given, it replaces
-automatic loading of cheat files, game patch files, and the bundled patch
-archive, and the files follow the
-cheat rules above, including the `+` and `-` markers and the cheat enable
-setting. GameDB patches are unaffected.
+automatic loading of cheat files, and the files follow the cheat rules above,
+including the `+` and `-` markers and the cheat enable setting. Game patch
+files, the bundled patch archive and GameDB patches still load.
 
 `-pnach-line <line>` adds one PNACH command, such as a `patch=` line. The
 option may be repeated. The lines form one unnamed cheat group after all
@@ -53,5 +52,5 @@ contains a line break or does not parse as a command is rejected at startup.
 ## Tests
 
 `tests/ctest/core/patch_tests.cpp` covers the section markers, command-line
-files replacing automatic loading in order, ordered discovery across content
+files replacing automatic cheat files in order, ordered discovery across content
 folders, alias cheat files, and command-line line validation.

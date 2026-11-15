@@ -114,30 +114,43 @@ TEST(Patch, UsesCanonicalSectionNameForHierarchyAndSettings)
 	EXPECT_EQ(info.GetNamePart(), "Skip Intro");
 }
 
-TEST(Patch, CustomPnachFilesReplaceAutomaticLoadingInOrder)
+TEST(Patch, CustomPnachFilesReplaceAutomaticCheatsInOrder)
 {
 	const std::filesystem::path test_directory = std::filesystem::current_path() /
 	                                             ("patch-pnach-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
 	ASSERT_TRUE(std::filesystem::create_directory(test_directory));
 
 	const std::string old_cheats_directory = EmuFolders::Cheats;
+	const std::string old_patches_directory = EmuFolders::Patches;
 	const std::vector<std::string> old_additional_content_folders = EmuFolders::AdditionalContentFolders;
 	struct Cleanup
 	{
 		std::filesystem::path directory;
 		std::string cheats_directory;
+		std::string patches_directory;
 		std::vector<std::string> additional_content_folders;
 		~Cleanup()
 		{
 			Patch::ClearPnachOverridePaths();
 			EmuFolders::Cheats = std::move(cheats_directory);
+			EmuFolders::Patches = std::move(patches_directory);
 			EmuFolders::AdditionalContentFolders = std::move(additional_content_folders);
 			std::error_code error;
 			std::filesystem::remove_all(directory, error);
 		}
-	} cleanup{test_directory, old_cheats_directory, old_additional_content_folders};
+	} cleanup{test_directory, old_cheats_directory, old_patches_directory, old_additional_content_folders};
 
-	const std::filesystem::path automatic_path = test_directory / "SLUS-00000_12345678.pnach";
+	const std::filesystem::path patches_directory = test_directory / "patches";
+	ASSERT_TRUE(std::filesystem::create_directory(patches_directory));
+	{
+		std::ofstream game_patch(patches_directory / "SLUS-00000_12345678.pnach");
+		game_patch << "[Widescreen 16:9]\npatch=1,EE,00100008,word,00000004\n";
+	}
+	EmuFolders::Patches = patches_directory.string();
+
+	const std::filesystem::path cheats_directory = test_directory / "cheats";
+	ASSERT_TRUE(std::filesystem::create_directory(cheats_directory));
+	const std::filesystem::path automatic_path = cheats_directory / "SLUS-00000_12345678.pnach";
 	const std::filesystem::path first_custom_path = test_directory / "first arbitrary custom file.txt";
 	const std::filesystem::path second_custom_path = test_directory / "second arbitrary custom file.pnach";
 	{
@@ -152,7 +165,7 @@ TEST(Patch, CustomPnachFilesReplaceAutomaticLoadingInOrder)
 	ASSERT_TRUE(std::filesystem::is_regular_file(first_custom_path));
 	ASSERT_TRUE(std::filesystem::is_regular_file(second_custom_path));
 
-	EmuFolders::Cheats = test_directory.string();
+	EmuFolders::Cheats = cheats_directory.string();
 	EmuFolders::AdditionalContentFolders.clear();
 	std::vector<Patch::PatchInfo> info = Patch::GetPatchInfo("SLUS-00000", 0x12345678, true, false, nullptr);
 	ASSERT_EQ(info.size(), 1u);
@@ -168,7 +181,9 @@ TEST(Patch, CustomPnachFilesReplaceAutomaticLoadingInOrder)
 	EXPECT_EQ(info[0].activation_mode, Patch::PatchActivationMode::ForcedEnabled);
 	EXPECT_EQ(info[1].name, "Custom\\Second");
 	EXPECT_EQ(info[1].activation_mode, Patch::PatchActivationMode::ForcedEnabled);
-	EXPECT_TRUE(Patch::GetPatchInfo("SLUS-00000", 0x12345678, false, false, nullptr).empty());
+	info = Patch::GetPatchInfo("SLUS-00000", 0x12345678, false, false, nullptr);
+	ASSERT_EQ(info.size(), 1u);
+	EXPECT_EQ(info[0].name, "Widescreen 16:9");
 }
 
 TEST(Patch, DiscoversCheatsInOrderedAdditionalContentFolders)

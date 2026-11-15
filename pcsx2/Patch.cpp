@@ -457,13 +457,10 @@ bool Patch::ContainsPatchName(const std::vector<PatchInfo>& patches, const std::
 template <typename F>
 void Patch::EnumeratePnachFiles(const std::string_view serial, u32 crc, bool cheats, bool for_ui, const F& f)
 {
-	if (!s_pnach_override_paths.empty())
+	if (cheats && !s_pnach_override_paths.empty())
 	{
-		// Custom PNACHs are treated as cheat files so they use the same section
-		// activation rules and global cheat enable setting as normal cheat PNACHs.
-		if (!cheats)
-			return;
-
+		// Custom PNACHs replace the automatic cheat files and use the same section activation rules and global cheat
+		// enable setting; game patch files still load.
 		for (const std::string& path : s_pnach_override_paths)
 		{
 			std::optional<std::string> contents = FileSystem::ReadFileToString(path.c_str());

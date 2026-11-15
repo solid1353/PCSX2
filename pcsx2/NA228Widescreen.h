@@ -4,12 +4,13 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 #include <span>
 
 namespace NA228Widescreen
 {
-	// Whether the running NA228 build has the widescreen setting, known once its 228.BIN is loaded; nothing before
-	// that or in other games. The span must refer directly to EE RAM and remain valid throughout the call.
-	std::optional<bool> Detect(std::span<const uint8_t> ram);
+	// Every NA228 disc has this file; retail NA2 and other games do not.
+	static constexpr const char* DISC_MARKER_PATH = "228/228.BIN";
+
+	// Whether this boot ELF of an NA228 disc has the widescreen setting.
+	bool Detect(std::span<const uint8_t> elf);
 } // namespace NA228Widescreen

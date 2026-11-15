@@ -161,7 +161,7 @@ namespace VMManager
 	static void LoadSettings();
 	static void LoadCoreSettings(SettingsInterface& si);
 	static void ApplyCoreSettings();
-	static void SetNA228Widescreen(std::optional<bool> widescreen);
+	static void UpdateNA228Widescreen();
 	static void LoadInputBindings(SettingsInterface& si, std::unique_lock<std::mutex>& lock);
 	static bool HasAnyBindingsForPad(const SettingsInterface& si, u32 port);
 	static void WarnAboutUnconfiguredController();
@@ -221,8 +221,6 @@ static bool s_frame_advance_hotkey_continuous = false;
 static constexpr double FRAME_ADVANCE_HOLD_DELAY_MS = 300.0;
 static u64 s_unlimited_frame_count = 0;
 static u64 s_unlimited_frames_remaining = 0;
-// Until the running NA228 build's 228.BIN loads, whether it is widescreen is still unknown.
-static bool s_na228_widescreen_pending = false;
 static LimiterModeType s_unlimited_frame_fallback_mode = LimiterModeType::Nominal;
 static bool s_unlimited_on_reset = false;
 static bool s_fast_boot_requested = false;
@@ -1358,6 +1356,7 @@ void VMManager::UpdateDiscDetails(bool booting)
 
 	// Patches are game-dependent, thus should get applied after game settings ia loaded.
 	Patch::ReloadPatches(s_disc_serial, HasBootedELF() ? s_current_crc : 0, true, true, false, false);
+	UpdateNA228Widescreen();
 
 	ReportGameChangeToHost();
 	if (MTGS::IsOpen())
@@ -1727,7 +1726,6 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 	s_unlimited_frame_count = boot_params.start_unlimited_frame_count.value_or(0);
 	s_unlimited_frames_remaining = s_unlimited_frame_count;
 	s_unlimited_frame_fallback_mode = boot_params.unlimited_frame_fallback_mode;
-	s_na228_widescreen_pending = true;
 	s_unlimited_on_reset = boot_params.unlimited_on_reset;
 
 	s_target_speed = GetTargetSpeedForLimiterMode(s_limiter_mode);
@@ -2039,8 +2037,6 @@ void VMManager::Reset()
 	}
 
 	ResetFrameLimiter();
-	SetNA228Widescreen(std::nullopt);
-	s_na228_widescreen_pending = true;
 	if (s_unlimited_frame_count > 0)
 	{
 		s_unlimited_frames_remaining = s_unlimited_frame_count;
@@ -3383,11 +3379,22 @@ void VMManager::Internal::EntryPointCompilingOnCPUThread()
 	R5900SymbolImporter.OnElfLoadedInMemory();
 }
 
-void VMManager::SetNA228Widescreen(std::optional<bool> widescreen)
+void VMManager::UpdateNA228Widescreen()
 {
-	// A widescreen NA228 build draws for 16:9 presentation, as `gsaspectratio=16:9` requests.
+	// A widescreen NA228 build draws for 16:9 presentation, as `gsaspectratio=16:9` requests. Its disc decides this
+	// before the game draws, so the window is sized once.
+	bool widescreen = false;
+	if (CDVDsys_GetSourceType() != CDVD_SourceType::NoDisc && s_elf_override.empty() && !s_disc_elf.empty() &&
+		!GSDumpReplayer::IsReplayingDump())
+	{
+		IsoReader isor;
+		ElfObject elfo;
+		widescreen = isor.Open() && isor.FileExists(NA228Widescreen::DISC_MARKER_PATH) &&
+					 cdvdLoadDiscElf(&elfo, isor, s_disc_elf, false, nullptr) && NA228Widescreen::Detect(elfo.GetData());
+	}
+
 	const float old_aspect_ratio = EmuConfig.CurrentCustomAspectRatio;
-	Patch::SetRuntimeAspectRatio(widescreen.value_or(false) ? std::optional<float>(16.0f / 9.0f) : std::nullopt);
+	Patch::SetRuntimeAspectRatio(widescreen ? std::optional<float>(16.0f / 9.0f) : std::nullopt);
 	if (EmuConfig.CurrentCustomAspectRatio != old_aspect_ratio)
 		ApplyCoreSettings();
 }
@@ -3397,16 +3404,6 @@ void VMManager::Internal::VSyncOnCPUThread()
 	Pad::UpdateMacroButtons();
 
 	Patch::ApplyVsyncPatches();
-
-	if (s_na228_widescreen_pending && eeMem)
-	{
-		const std::optional<bool> widescreen = NA228Widescreen::Detect({eeMem->Main, Ps2MemSize::MainRam});
-		if (widescreen.has_value())
-		{
-			s_na228_widescreen_pending = false;
-			SetNA228Widescreen(widescreen);
-		}
-	}
 
 	// Count emulated frames at the CPU-thread VSync boundary; this needs proper runtime testing across consecutive VM launches.
 	if (s_unlimited_frames_remaining > 0)

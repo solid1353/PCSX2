@@ -23,9 +23,10 @@ the game does not see the chord's inputs (`pcsx2/Input/InputManager.cpp`).
 
 Starting a game with a non-default PAL frame rate shows no warning.
 
-Once an NA228 build loads its 228.BIN, PCSX2 presents it at 16:9 when it has the
-widescreen setting, as `gsaspectratio=16:9` would, while the aspect ratio is
-Auto 4:3/3:2 (`pcsx2/NA228Widescreen.cpp`). A reset checks again.
+PCSX2 presents an NA228 disc, one with `228/228.BIN`, at 16:9 from its first
+frame when its boot ELF has the widescreen setting, as `gsaspectratio=16:9`
+would, while the aspect ratio is Auto 4:3/3:2 (`pcsx2/NA228Widescreen.cpp`).
+The disc decides it at boot and on a disc change.
 
 The game list's Copy File Name context menu item and hotkey (default Ctrl+C)
 copy the selected entry's file name, with its extension, to the clipboard.

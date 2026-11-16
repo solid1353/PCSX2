@@ -15,6 +15,7 @@
 #include "common/Console.h"
 #include "common/BitUtils.h"
 #include "common/DynamicLibrary.h"
+#include "common/FileSystem.h"
 #include "common/Path.h"
 #include "common/SmallString.h"
 #include "common/StringUtil.h"
@@ -167,7 +168,7 @@ namespace GSCapture
 	static bool SendFrame(const PendingFrame& pf);
 	static bool ReceivePackets(AVCodecContext* codec_context, AVStream* stream, AVPacket* packet);
 	static bool ProcessAudioPackets(s64 video_pts);
-	static void InternalEndCapture(std::unique_lock<std::mutex>& lock);
+	static bool InternalEndCapture(std::unique_lock<std::mutex>& lock);
 	static CodecList GetCodecListForContainer(const char* container, AVMediaType type);
 
 	static std::mutex s_lock;
@@ -175,6 +176,8 @@ namespace GSCapture
 	static std::string s_filename;
 	static std::atomic_bool s_capturing{false};
 	static std::atomic_bool s_encoding_error{false};
+	static bool s_force_audio_video = false;
+	static bool s_wrote_media = false;
 
 	static AVFormatContext* s_format_context = nullptr;
 
@@ -371,13 +374,13 @@ bool GSCapture::IsUsingHardwareVideoEncoding()
 	return (s_video_hw_context != nullptr);
 }
 
-bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float aspect, std::string filename)
+bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float aspect, std::string filename, bool force_audio_video)
 {
-	const bool capture_video = GSConfig.EnableVideoCapture;
-	const bool capture_audio = GSConfig.EnableAudioCapture;
+	const bool capture_video = force_audio_video || GSConfig.EnableVideoCapture;
+	const bool capture_audio = force_audio_video || GSConfig.EnableAudioCapture;
 
 	Console.WriteLn("Recommended resolution: %d x %d, DAR for muxing: %.4f", recommendedResolution.x, recommendedResolution.y, aspect);
-	if (filename.empty() || !LoadFFmpeg(true))
+	if (filename.empty())
 		return false;
 
 	std::unique_lock<std::mutex> lock(s_lock);
@@ -385,6 +388,8 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 	pxAssert(fps != 0);
 
 	InternalEndCapture(lock);
+	if (!LoadFFmpeg(!force_audio_video))
+		return false;
 
 	s_size = GSVector2i(Common::AlignUpPow2(recommendedResolution.x, 8), Common::AlignUpPow2(recommendedResolution.y, 8));
 	s_filename = std::move(filename);
@@ -843,6 +848,7 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 	if (capture_audio)
 		SPU2::SetAudioCaptureActive(true);
 
+	s_force_audio_video = force_audio_video;
 	s_capturing.store(true, std::memory_order_release);
 	StartEncoderThread();
 
@@ -1048,10 +1054,7 @@ void GSCapture::ProcessAllInFlightFrames(std::unique_lock<std::mutex>& lock)
 	while (s_frames_pending_map > 0)
 		ProcessFramePendingMap(lock);
 
-	while (s_frames_pending_encode > 0)
-	{
-		s_frame_encoded_cv.wait(lock, []() { return (s_frames_pending_encode == 0 || s_encoding_error); });
-	}
+	s_frame_encoded_cv.wait(lock, []() { return s_frames_pending_encode == 0; });
 }
 
 bool GSCapture::ReceivePackets(AVCodecContext* codec_context, AVStream* stream, AVPacket* packet)
@@ -1081,6 +1084,9 @@ bool GSCapture::ReceivePackets(AVCodecContext* codec_context, AVStream* stream, 
 			LogAVError(res, "av_interleaved_write_frame() failed: ");
 			return false;
 		}
+
+		if (!s_video_stream || stream == s_video_stream)
+			s_wrote_media = true;
 
 		wrap_av_packet_unref(packet);
 	}
@@ -1239,11 +1245,12 @@ bool GSCapture::ProcessAudioPackets(s64 video_pts)
 	return true;
 }
 
-void GSCapture::InternalEndCapture(std::unique_lock<std::mutex>& lock)
+bool GSCapture::InternalEndCapture(std::unique_lock<std::mutex>& lock)
 {
 	int res;
 
 	const bool was_capturing = s_capturing.load(std::memory_order_acquire);
+	bool finalized = was_capturing;
 
 	if (was_capturing)
 	{
@@ -1280,38 +1287,43 @@ void GSCapture::InternalEndCapture(std::unique_lock<std::mutex>& lock)
 		s_audio_buffer_size.store(0, std::memory_order_release);
 		s_audio_frame_pos = 0;
 
-		s_filename = {};
+		finalized = !s_encoding_error;
 		s_encoding_error = false;
 
 		// end of stream
-		if (s_video_stream)
-		{
-			res = wrap_avcodec_send_frame(s_video_codec_context, nullptr);
-			if (res < 0)
-				LogAVError(res, "avcodec_send_frame() for video EOS failed: ");
-			else
-				ReceivePackets(s_video_codec_context, s_video_stream, s_video_packet);
-		}
-		if (s_audio_stream)
-		{
-			res = wrap_avcodec_send_frame(s_audio_codec_context, nullptr);
-			if (res < 0)
-				LogAVError(res, "avcodec_send_frame() for audio EOS failed: ");
-			else
-				ReceivePackets(s_audio_codec_context, s_audio_stream, s_audio_packet);
-		}
+		const auto flush_encoder = [](AVCodecContext* codec, AVStream* stream, AVPacket* packet) {
+			if (!stream)
+				return true;
+
+			const int result = wrap_avcodec_send_frame(codec, nullptr);
+			if (result < 0)
+			{
+				LogAVError(result, "avcodec_send_frame() for EOS failed: ");
+				return false;
+			}
+
+			return ReceivePackets(codec, stream, packet);
+		};
+		finalized = flush_encoder(s_video_codec_context, s_video_stream, s_video_packet) && finalized;
+		finalized = flush_encoder(s_audio_codec_context, s_audio_stream, s_audio_packet) && finalized;
 
 		// end of file!
 		res = wrap_av_write_trailer(s_format_context);
 		if (res < 0)
+		{
 			LogAVError(res, "av_write_trailer() failed: ");
+			finalized = false;
+		}
 	}
 
 	if (s_format_context)
 	{
 		res = wrap_avio_closep(&s_format_context->pb);
 		if (res < 0)
+		{
 			LogAVError(res, "avio_closep() failed: ");
+			finalized = false;
+		}
 	}
 
 	if (s_sws_context)
@@ -1355,21 +1367,34 @@ void GSCapture::InternalEndCapture(std::unique_lock<std::mutex>& lock)
 
 	if (was_capturing)
 		UnloadFFmpeg();
+
+	finalized = finalized && s_wrote_media && FileSystem::OpenManagedCFile(s_filename.c_str(), "rb");
+	s_filename.clear();
+	s_force_audio_video = false;
+	s_wrote_media = false;
+	return finalized;
 }
 
-void GSCapture::EndCapture()
+bool GSCapture::EndCapture()
 {
+	bool finalized;
 	{
 		std::unique_lock<std::mutex> lock(s_lock);
-		InternalEndCapture(lock);
+		finalized = InternalEndCapture(lock);
 	}
 
 	Host::OnCaptureStopped();
+	return finalized;
 }
 
 bool GSCapture::IsCapturing()
 {
 	return s_capturing.load(std::memory_order_acquire);
+}
+
+bool GSCapture::IsForcingAudioVideo()
+{
+	return s_force_audio_video;
 }
 
 bool GSCapture::IsCapturingVideo()

@@ -44,7 +44,7 @@ namespace
 		std::memcpy(payload.data() + 1, &path_size, sizeof(path_size));
 		std::copy(path.begin(), path.end(), payload.begin() + 5);
 
-		const std::optional<ParsedScreenshotRequest> request = ParseScreenshotRequest(payload);
+		const std::optional<ParsedFileCaptureRequest> request = ParseFileCaptureRequest(payload, ".png");
 		ASSERT_TRUE(request.has_value());
 		EXPECT_EQ(request->path, path);
 		EXPECT_EQ(request->bytes_consumed, 5 + path.size());
@@ -53,10 +53,38 @@ namespace
 	TEST(PINEReplayAnalysisProtocol, RejectsInvalidScreenshotPaths)
 	{
 		EXPECT_FALSE(IsScreenshotPathValid("relative/frame.png"));
-		EXPECT_FALSE(ParseScreenshotRequest(std::array<u8, 5>{PROTOCOL_VERSION}).has_value());
+		EXPECT_FALSE(ParseFileCaptureRequest(std::array<u8, 5>{PROTOCOL_VERSION}).has_value());
 
 		std::array<u8, 8> relative = {PROTOCOL_VERSION, 3, 0, 0, 0, 'f', 'o', 'o'};
-		EXPECT_FALSE(ParseScreenshotRequest(relative).has_value());
+		EXPECT_FALSE(ParseFileCaptureRequest(relative).has_value());
+	}
+
+	TEST(PINEFileCaptureProtocol, ParsesVersionedMatroskaPath)
+	{
+#ifdef _WIN32
+		const std::string path = "C:\\captures\\shot.MKV";
+#else
+		const std::string path = "/captures/shot.MKV";
+#endif
+		std::vector<u8> payload(5 + path.size() + 1);
+		payload[0] = PROTOCOL_VERSION;
+		const u32 path_size = static_cast<u32>(path.size());
+		std::memcpy(payload.data() + 1, &path_size, sizeof(path_size));
+		std::copy(path.begin(), path.end(), payload.begin() + 5);
+		payload.back() = 0x21;
+
+		const auto request = ParseFileCaptureRequest(payload, ".mkv");
+		ASSERT_TRUE(request.has_value());
+		EXPECT_EQ(request->path, path);
+		EXPECT_EQ(request->bytes_consumed, 5 + path.size());
+		EXPECT_FALSE(ParseFileCaptureRequest(payload, ".png").has_value());
+		EXPECT_FALSE(ParseFileCaptureRequest(std::span(payload).first(payload.size() - 2), ".mkv").has_value());
+
+		payload[0] = PROTOCOL_VERSION + 1;
+		EXPECT_FALSE(ParseFileCaptureRequest(payload, ".mkv").has_value());
+		payload[0] = PROTOCOL_VERSION;
+		payload[5] = 0;
+		EXPECT_FALSE(ParseFileCaptureRequest(payload, ".mkv").has_value());
 	}
 
 	TEST(PINEReplayAnalysisProtocol, ParsesVersionedGSDumpRequest)

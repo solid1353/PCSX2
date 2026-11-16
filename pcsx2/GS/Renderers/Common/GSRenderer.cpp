@@ -1081,7 +1081,7 @@ void GSSetDisplayAlignment(GSDisplayAlignment alignment)
 	s_display_alignment = alignment;
 }
 
-bool GSRenderer::BeginCapture(std::string filename, const GSVector2i& size)
+bool GSRenderer::BeginCapture(std::string filename, const GSVector2i& size, bool force_audio_video)
 {
 	const GSVector2i capture_resolution = (size.x != 0 && size.y != 0) ?
 											  size :
@@ -1091,12 +1091,12 @@ bool GSRenderer::BeginCapture(std::string filename, const GSVector2i& size)
 
 	return GSCapture::BeginCapture(GetTvRefreshRate(), capture_resolution,
 		GetCurrentAspectRatioFloat(GetVideoMode() == GSVideoMode::SDTV_480P),
-		std::move(filename));
+		std::move(filename), force_audio_video);
 }
 
-void GSRenderer::EndCapture()
+bool GSRenderer::EndCapture()
 {
-	GSCapture::EndCapture();
+	return GSCapture::EndCapture();
 }
 
 GSTexture* GSRenderer::LookupPaletteSource(u32 CBP, u32 CPSM, u32 CBW, GSVector2i& offset, float* scale, const GSVector2i& size)

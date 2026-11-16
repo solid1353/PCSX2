@@ -1,6 +1,6 @@
 # PINE agent control
 
-The fork extends PINE protocol version 1 with opcodes `0x10` through `0x1F`.
+The fork extends PINE protocol version 1 with opcodes `0x10` through `0x21`.
 Opcodes `0x00` through `0x0F` keep their upstream meaning. The server is in
 `pcsx2/PINE.cpp` and `pcsx2/PINE.h`.
 
@@ -46,6 +46,35 @@ the next presented frame, or the current frame while paused, at the size and PNG
 compression of ordinary screenshots, and replies only after the file is written.
 It fails on an invalid path, while another screenshot is pending, when the image
 cannot be rendered or written, or when no frame is presented within 30 seconds.
+
+## Video capture opcodes
+
+Both commands accept a running or paused VM, including a surfaceless instance.
+Each request starts with protocol version `1`, and each successful reply
+payload consists of that same version byte.
+
+| Opcode | Request after the version | Reply payload after the version |
+| ---: | --- | --- |
+| `0x20` start video capture | `u32 length`, path bytes | none |
+| `0x21` stop video capture | none | none |
+
+- **Start** takes an absolute UTF-8 path of 1 through 32,768 bytes with no
+  NUL terminator, ending in `.mkv` (case-insensitive). The parent directory
+  must exist and an existing file at the path is overwritten. The capture
+  includes video and game audio, even with host playback muted. Resolution,
+  display aspect ratio, codecs and encoder options come from the same
+  capture pipeline as the GUI. The reply follows encoder initialization
+  and writing the container header. Start fails if a capture is already
+  active, the path is invalid, or setup fails.
+- **Stop** drains pending frames and the encoders, writes the container
+  trailer, and closes the file before replying. It fails if no capture is
+  active, if no video frames were written, or if encoding or finalization
+  fails or the file cannot be reopened for reading.
+
+Both commands return the standard failure reply if there is no valid VM.
+For frame-stepped capture, start while paused, advance the shot's frames,
+then stop while paused. A GS reopen or hardware reset can split the
+recording into numbered parts, as with GUI capture.
 
 ## Agent input opcodes
 
@@ -192,7 +221,7 @@ still succeeds once the VM is paused again.
   the join; aborting and neutralizing agent control first, with the step's
   wait observing the abort, would remove the deadlock. The same wait affects
   any PINE request that is waiting for the CPU thread at that moment.
-- A failed VM-control, upstream, unknown, or replay-analysis command does not
+- A failed VM-control, upstream, unknown, video capture, or replay-analysis command does not
   clear installed agent overrides. They remain until released, replaced, or
   cleared by an agent failure, disconnect, reset, or shutdown.
 
@@ -204,4 +233,4 @@ still succeeds once the VM is paused again.
   recording/replay rule, and the state layout.
 - `tests/ctest/core/pine_replay_analysis_tests.cpp` covers replay-analysis
   request parsing, path validation, the read-only replay rule, step bounds,
-  and interval matching.
+  interval matching, and the versioned Matroska capture path.

@@ -261,10 +261,12 @@ bool GSreopen(bool recreate_device, bool recreate_renderer, GSRendererType new_r
 
 	std::string capture_filename;
 	GSVector2i capture_size;
+	bool force_audio_video = false;
 	if (GSCapture::IsCapturing())
 	{
 		capture_filename = GSCapture::GetNextCaptureFileName();
 		capture_size = GSCapture::GetSize();
+		force_audio_video = GSCapture::IsForcingAudioVideo();
 		Console.Warning(fmt::format("Restarting video capture to {}.", capture_filename));
 		g_gs_renderer->EndCapture();
 	}
@@ -336,7 +338,7 @@ bool GSreopen(bool recreate_device, bool recreate_renderer, GSRendererType new_r
 	}
 
 	if (!capture_filename.empty())
-		g_gs_renderer->BeginCapture(std::move(capture_filename), capture_size);
+		g_gs_renderer->BeginCapture(std::move(capture_filename), capture_size, force_audio_video);
 
 	return true;
 }
@@ -389,9 +391,10 @@ void GSreset(bool hardware_reset)
 	{
 		std::string next_filename = GSCapture::GetNextCaptureFileName();
 		const GSVector2i size = GSCapture::GetSize();
+		const bool force_audio_video = GSCapture::IsForcingAudioVideo();
 		Console.Warning(fmt::format("Restarting video capture to {}.", next_filename));
 		g_gs_renderer->EndCapture();
-		g_gs_renderer->BeginCapture(std::move(next_filename), size);
+		g_gs_renderer->BeginCapture(std::move(next_filename), size, force_audio_video);
 	}
 }
 
@@ -506,18 +509,17 @@ void GSWriteSavestateGSDump(std::function<void(std::vector<u8>)> data_callback)
 		g_gs_renderer->WriteSavestateGSDump(std::move(data_callback));
 }
 
-bool GSBeginCapture(std::string filename)
+bool GSBeginCapture(std::string filename, bool force_audio_video)
 {
 	if (g_gs_renderer)
-		return g_gs_renderer->BeginCapture(std::move(filename));
+		return g_gs_renderer->BeginCapture(std::move(filename), GSVector2i(0, 0), force_audio_video);
 	else
 		return false;
 }
 
-void GSEndCapture()
+bool GSEndCapture()
 {
-	if (g_gs_renderer)
-		g_gs_renderer->EndCapture();
+	return g_gs_renderer && g_gs_renderer->EndCapture();
 }
 
 void GSPresentCurrentFrame()

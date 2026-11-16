@@ -166,7 +166,7 @@ namespace PINEServer
 			size_t bytes_consumed;
 		};
 
-		struct ParsedScreenshotRequest
+		struct ParsedFileCaptureRequest
 		{
 			std::string path;
 			size_t bytes_consumed;
@@ -197,7 +197,7 @@ namespace PINEServer
 		bool ReplayStepIntervalsMatch(const ReplayStepResult& result, u32 vblank_count);
 		bool IsScreenshotPathValid(std::string_view path);
 		std::optional<ParsedStepRequest> ParseStepRequest(std::span<const u8> payload);
-		std::optional<ParsedScreenshotRequest> ParseScreenshotRequest(std::span<const u8> payload);
+		std::optional<ParsedFileCaptureRequest> ParseFileCaptureRequest(std::span<const u8> payload, std::string_view extension = {});
 		std::optional<ParsedGSDumpRequest> ParseGSDumpRequest(std::span<const u8> payload);
 		bool QueryStatusFromServer(ReplayStatus* status);
 		bool StartStepFromServer(const ParsedStepRequest& request, StepTicket* ticket);

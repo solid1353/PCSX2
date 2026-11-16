@@ -5,6 +5,7 @@
 #include "Common.h"
 #include "Counters.h"
 #include "GS/GS.h"
+#include "GS/GSCapture.h"
 #include "Host.h"
 #include "MTGS.h"
 #include "Elfheader.h"
@@ -922,7 +923,7 @@ namespace PINEServer
 			return request;
 		}
 
-		std::optional<ParsedScreenshotRequest> ParseScreenshotRequest(const std::span<const u8> payload)
+		std::optional<ParsedFileCaptureRequest> ParseFileCaptureRequest(const std::span<const u8> payload, const std::string_view extension)
 		{
 			if (payload.size() < 5 || payload[0] != PROTOCOL_VERSION)
 				return std::nullopt;
@@ -932,10 +933,10 @@ namespace PINEServer
 			if (path_size == 0 || path_size > MAX_SCREENSHOT_PATH_SIZE || payload.size() < 5 + path_size)
 				return std::nullopt;
 
-			ParsedScreenshotRequest request;
+			ParsedFileCaptureRequest request;
 			request.path.assign(reinterpret_cast<const char*>(payload.data() + 5), path_size);
 			request.bytes_consumed = 5 + path_size;
-			if (!IsScreenshotPathValid(request.path))
+			if (!IsScreenshotPathValid(request.path) || (!extension.empty() && !StringUtil::EndsWithNoCase(request.path, extension)))
 				return std::nullopt;
 			return request;
 		}
@@ -1231,6 +1232,8 @@ namespace PINEServer
 		MsgReplayShutdown = static_cast<u8>(ReplayAnalysis::Opcode::Shutdown), /**< Gracefully shuts down a paused read-only replay. */
 		MsgReplayGSDump = static_cast<u8>(ReplayAnalysis::Opcode::GSDump), /**< Queues a GS dump from a paused read-only replay. */
 		MsgScreenshotToFile = 0x1F, /**< Saves the next presented frame as PNG to an exact path. */
+		MsgStartVideoCapture = 0x20, /**< Starts recording video and audio to an exact MKV path. */
+		MsgStopVideoCapture = 0x21, /**< Stops video capture and finalizes the file. */
 		MsgUnimplemented = 0xFF /**< Unimplemented IPC message. */
 	};
 
@@ -1615,6 +1618,21 @@ static bool SaveScreenshotToFileFromServer(std::string path)
 	std::unique_lock lock(result->mutex);
 	return result->written.wait_for(lock, std::chrono::seconds(30), [&result]() { return result->saved.has_value(); }) &&
 	       *result->saved;
+}
+
+static bool RunVideoCaptureCommandFromServer(std::function<bool()> command)
+{
+	bool success = false;
+	Host::RunOnCPUThread(
+		[&command, &success]() {
+			if (!VMManager::HasValidVM() || !MTGS::IsOpen())
+				return;
+
+			MTGS::RunOnGSThread([&command, &success]() { success = command(); });
+			MTGS::WaitGS(false, false, false);
+		},
+		true);
+	return success;
 }
 
 PINEServer::IPCBuffer PINEServer::ParseCommand(std::span<u8> buf, std::vector<u8>& ret_buffer, u32 buf_size)
@@ -2091,8 +2109,8 @@ PINEServer::IPCBuffer PINEServer::ParseCommand(std::span<u8> buf, std::vector<u8
 			}
 			case MsgReplayScreenshot:
 			{
-				const std::optional<ReplayAnalysis::ParsedScreenshotRequest> request =
-					ReplayAnalysis::ParseScreenshotRequest(buf.subspan(buf_cnt, buf_size - buf_cnt));
+				const std::optional<ReplayAnalysis::ParsedFileCaptureRequest> request =
+					ReplayAnalysis::ParseFileCaptureRequest(buf.subspan(buf_cnt, buf_size - buf_cnt));
 				if (!request.has_value() || !SafetyChecks(buf_cnt, static_cast<int>(request->bytes_consumed), ret_cnt, 1, buf_size) ||
 					!ReplayAnalysis::SaveScreenshotFromServer(request->path))
 				{
@@ -2106,9 +2124,9 @@ PINEServer::IPCBuffer PINEServer::ParseCommand(std::span<u8> buf, std::vector<u8
 			}
 			case MsgScreenshotToFile:
 			{
-				const std::optional<ReplayAnalysis::ParsedScreenshotRequest> request =
-					ReplayAnalysis::ParseScreenshotRequest(buf.subspan(buf_cnt, buf_size - buf_cnt));
-				if (!request.has_value() || !StringUtil::EndsWithNoCase(request->path, ".png") ||
+				const std::optional<ReplayAnalysis::ParsedFileCaptureRequest> request =
+					ReplayAnalysis::ParseFileCaptureRequest(buf.subspan(buf_cnt, buf_size - buf_cnt), ".png");
+				if (!request.has_value() ||
 					!SafetyChecks(buf_cnt, static_cast<int>(request->bytes_consumed), ret_cnt, 1, buf_size) ||
 					!SaveScreenshotToFileFromServer(request->path))
 				{
@@ -2116,6 +2134,36 @@ PINEServer::IPCBuffer PINEServer::ParseCommand(std::span<u8> buf, std::vector<u8
 				}
 
 				buf_cnt += static_cast<u32>(request->bytes_consumed);
+				ToResultVector(ret_buffer, ReplayAnalysis::PROTOCOL_VERSION, ret_cnt);
+				ret_cnt++;
+				break;
+			}
+			case MsgStartVideoCapture:
+			{
+				std::optional<ReplayAnalysis::ParsedFileCaptureRequest> request =
+					ReplayAnalysis::ParseFileCaptureRequest(buf.subspan(buf_cnt, buf_size - buf_cnt), ".mkv");
+				if (!request.has_value() || !SafetyChecks(buf_cnt, static_cast<int>(request->bytes_consumed), ret_cnt, 1, buf_size) ||
+					!RunVideoCaptureCommandFromServer([path = std::move(request->path)]() mutable {
+						return !GSCapture::IsCapturing() && GSBeginCapture(std::move(path), true);
+					}))
+				{
+					goto error;
+				}
+
+				buf_cnt += static_cast<u32>(request->bytes_consumed);
+				ToResultVector(ret_buffer, ReplayAnalysis::PROTOCOL_VERSION, ret_cnt);
+				ret_cnt++;
+				break;
+			}
+			case MsgStopVideoCapture:
+			{
+				if (!SafetyChecks(buf_cnt, 1, ret_cnt, 1, buf_size) || buf[buf_cnt] != ReplayAnalysis::PROTOCOL_VERSION ||
+					!RunVideoCaptureCommandFromServer([]() { return GSCapture::IsCapturing() && GSEndCapture(); }))
+				{
+					goto error;
+				}
+
+				buf_cnt++;
 				ToResultVector(ret_buffer, ReplayAnalysis::PROTOCOL_VERSION, ret_cnt);
 				ret_cnt++;
 				break;

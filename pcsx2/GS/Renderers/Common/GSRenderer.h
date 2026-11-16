@@ -64,8 +64,8 @@ public:
 	void WriteSavestateGSDump(std::function<void(std::vector<u8>)> data_callback);
 	void StopGSDump();
 	void PresentCurrentFrame();
-	bool BeginCapture(std::string filename, const GSVector2i& size = GSVector2i(0, 0));
-	void EndCapture();
+	bool BeginCapture(std::string filename, const GSVector2i& size = GSVector2i(0, 0), bool force_audio_video = false);
+	bool EndCapture();
 };
 
 extern std::unique_ptr<GSRenderer> g_gs_renderer;

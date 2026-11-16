@@ -65,7 +65,9 @@ payload consists of that same version byte.
   display aspect ratio, codecs and encoder options come from the same
   capture pipeline as the GUI. The reply follows encoder initialization
   and writing the container header. Start fails if a capture is already
-  active, the path is invalid, or setup fails.
+  active, the path is invalid, or setup fails. If the game has yet to set
+  a supported video mode or automatic capture resolution is still zero,
+  start returns the standard failure reply. Retry after the game renders.
 - **Stop** drains pending frames and the encoders, writes the container
   trailer, and closes the file before replying. It fails if no capture is
   active, if no video frames were written, or if encoding or finalization

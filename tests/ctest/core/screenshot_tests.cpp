@@ -2,12 +2,21 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "Config.h"
+#include "GS/GSCapture.h"
 #include "common/MemorySettingsInterface.h"
 #include "common/SettingsWrapper.h"
 #include "common/Image.h"
 #include <zlib.h>
 
 #include <gtest/gtest.h>
+
+TEST(VideoCapture, RejectsMissingVideoTimingOrDimensions)
+{
+	EXPECT_FALSE(GSCapture::BeginCapture(0.0f, GSVector2i(640, 480), 4.0f / 3.0f, "capture.mkv", true));
+	EXPECT_FALSE(GSCapture::BeginCapture(60.0f, GSVector2i(0, 480), 4.0f / 3.0f, "capture.mkv", true));
+	EXPECT_FALSE(GSCapture::BeginCapture(60.0f, GSVector2i(640, 0), 4.0f / 3.0f, "capture.mkv", true));
+	EXPECT_FALSE(GSCapture::IsCapturing());
+}
 
 TEST(ScreenshotSettings, EmptySettingsSelect1000By750)
 {

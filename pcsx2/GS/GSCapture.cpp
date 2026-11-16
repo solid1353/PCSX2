@@ -379,13 +379,15 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 	const bool capture_video = force_audio_video || GSConfig.EnableVideoCapture;
 	const bool capture_audio = force_audio_video || GSConfig.EnableAudioCapture;
 
-	Console.WriteLn("Recommended resolution: %d x %d, DAR for muxing: %.4f", recommendedResolution.x, recommendedResolution.y, aspect);
-	if (filename.empty())
+	if (filename.empty() || fps <= 0.0f ||
+		(capture_video && (recommendedResolution.x <= 0 || recommendedResolution.y <= 0)))
+	{
 		return false;
+	}
+
+	Console.WriteLn("Recommended resolution: %d x %d, DAR for muxing: %.4f", recommendedResolution.x, recommendedResolution.y, aspect);
 
 	std::unique_lock<std::mutex> lock(s_lock);
-
-	pxAssert(fps != 0);
 
 	InternalEndCapture(lock);
 	if (!LoadFFmpeg(!force_audio_video))

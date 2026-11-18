@@ -74,6 +74,7 @@ oprofile_data/
 /bin/**/*.lib
 /bin/**/*.pdb
 /bin/pcsx2*
+/bin/PCSX2.app/
 /bin/qt.conf
 /bin/bios
 /bin/cache

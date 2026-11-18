@@ -90,6 +90,7 @@ written with the state, paused or not ([marker capture](input_recording_capture.
 Saving to a slot shows "Failed to save GS dump to slot N." when writing the
 dump fails, and no message of its own when it succeeds (`pcsx2/VMManager.cpp`).
 
+- [Build on Apple Silicon](building_macos_arm64.md)
 - [Launch options](launch_options.md): command-line options for windows,
   speed, settings, memory cards, PINE, and agent replay.
 - [Input recording capture](input_recording_capture.md): recording paths,

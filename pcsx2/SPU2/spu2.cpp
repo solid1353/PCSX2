@@ -9,6 +9,7 @@
 #include "Host.h"
 #include "GS/GSCapture.h"
 #include "MTGS.h"
+#include "Recording/InputRecording.h"
 #include "R3000A.h"
 #include "VMManager.h"
 
@@ -522,6 +523,7 @@ __forceinline void spu2Output(StereoOut32 out)
 	/* Some games pause voices with the volume left on leaving us with
      * significant DC offset, so we filter it out (e.x. SSX 3)*/
 	DCFilter(conv);
+	g_InputRecording.collectVideoAudioSample(conv);
 
 	s_current_chunk[s_current_chunk_pos++] = conv[0];
 	s_current_chunk[s_current_chunk_pos++] = conv[1];

@@ -21,6 +21,7 @@ struct InputRecordingCaptureDirectories
 
 std::optional<InputRecordingCaptureMode> ParseInputRecordingCaptureMode(std::string_view value);
 std::optional<InputRecordingCaptureMarkerRanges> ParseInputRecordingCaptureMarkers(std::string_view value);
+std::optional<InputRecordingVideoFrameRange> ParseInputRecordingVideoFrames(std::string_view value);
 bool IsInputRecordingCaptureMarkerSelected(const InputRecordingCaptureMarkerRanges& ranges, u32 marker);
 InputRecordingCaptureDirectories GetInputRecordingCaptureDirectories(std::string_view recording_path,
 	std::string_view capture_directory, InputRecordingCaptureMode mode);
@@ -37,7 +38,8 @@ public:
 	bool create(const std::string& filename, const bool fromSaveState, const std::string& authorName);
 	bool play(const std::string& path, bool capture_markers = false, const std::string& capture_directory = {},
 		InputRecordingCaptureMode capture_mode = InputRecordingCaptureMode::Full,
-		const InputRecordingCaptureMarkerRanges& capture_marker_ranges = {});
+		const InputRecordingCaptureMarkerRanges& capture_marker_ranges = {},
+		const std::string& video_path = {}, std::optional<InputRecordingVideoFrameRange> video_frames = {});
 	void stop();
 
 	static void InformGSThread();
@@ -50,6 +52,15 @@ public:
 	bool isActive() const;
 	void stopReadOnlyReplayAtEndOnResume();
 	void processRecordQueue();
+	void prepareVideoFrame();
+	void finishVideoFrame();
+	bool isCapturingVideo() const { return m_is_active && m_video_frames.has_value(); }
+	bool didVideoCaptureComplete() const { return m_video_complete; }
+	void collectVideoAudioSample(const float* sample)
+	{
+		if (isCapturingVideo() && m_frame_counter >= m_video_frames->first && m_frame_counter <= m_video_frames->last)
+			m_video_audio.insert(m_video_audio.end(), sample, sample + 2);
+	}
 
 	void setStartingFrame(u32 startingFrame);
 	u32 getStartingFrame();
@@ -80,6 +91,11 @@ private:
 	u32 m_capture_index = 0;
 	std::string m_capture_savestate_directory;
 	std::string m_capture_snapshot_directory;
+	std::string m_video_path;
+	std::optional<InputRecordingVideoFrameRange> m_video_frames;
+	std::vector<float> m_video_audio;
+	bool m_video_started = false;
+	bool m_video_complete = false;
 
 	// A consistent way to run actions at the end of the each frame (ie. stop the recording)
 	std::queue<std::function<void()>> m_recordingQueue;

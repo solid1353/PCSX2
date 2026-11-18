@@ -98,6 +98,7 @@ static bool s_batch_mode = false;
 static bool s_nogui_mode = false;
 static bool s_surfaceless_mode = false;
 static bool s_agent_replay_mode = false;
+static bool s_input_recording_video_requested = false;
 static bool s_pine_port_overridden = false;
 static bool s_start_big_picture_mode = false;
 static bool s_start_fullscreen = false;
@@ -282,10 +283,20 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 	const InputRecordingCaptureMarkerRanges input_recording_capture_markers =
 		boot_params->input_recording_capture_markers;
 	const bool create_input_recording = boot_params->create_input_recording;
+	const std::string input_recording_video = boot_params->input_recording_video;
+	const auto input_recording_video_frames = boot_params->input_recording_video_frames;
 	auto done_callback = [input_recording, input_recording_capture_directory, capture_input_recording, input_recording_capture_mode,
-							 input_recording_capture_markers, create_input_recording](VMBootResult result, const Error& error) {
+							 input_recording_capture_markers, create_input_recording, input_recording_video,
+							 input_recording_video_frames](VMBootResult result, const Error& error) {
 		if (result != VMBootResult::StartupSuccess)
 		{
+			if (!input_recording_video.empty())
+			{
+				Console.Error("Input recording video capture failed to boot: %s", error.GetDescription().c_str());
+				g_emu_thread->getEventLoop()->quit();
+				Host::RequestExitApplication(false);
+				return;
+			}
 			Host::ReportErrorAsync(TRANSLATE_STR("QtHost", "Startup Error"), error.GetDescription());
 			return;
 		}
@@ -294,9 +305,17 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 			const bool started = create_input_recording ? g_InputRecording.create(input_recording, false, std::string()) :
 			                                              g_InputRecording.play(input_recording, capture_input_recording,
 															  input_recording_capture_directory, input_recording_capture_mode,
-															  input_recording_capture_markers);
+															  input_recording_capture_markers, input_recording_video, input_recording_video_frames);
 			if (!started)
 			{
+				if (!input_recording_video.empty())
+				{
+					Console.Error("Input recording video capture failed to start replay.");
+					VMManager::Shutdown(false);
+					g_emu_thread->getEventLoop()->quit();
+					Host::RequestExitApplication(false);
+					return;
+				}
 				Host::ReportErrorAsync(TRANSLATE_STR("QtHost", "Input Recording Error"),
 					create_input_recording ? TRANSLATE_STR("QtHost", "Failed to start power-on input recording.") :
 											 TRANSLATE_STR("QtHost", "Failed to start input recording replay."));
@@ -306,7 +325,7 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 			}
 		}
 
-		if (!s_agent_replay_mode && !Host::GetBoolSettingValue("UI", "StartPaused", false))
+		if (!input_recording_video.empty() || (!s_agent_replay_mode && !Host::GetBoolSettingValue("UI", "StartPaused", false)))
 		{
 			// This will come back and call OnVMResumed().
 			VMManager::SetState(VMState::Running);
@@ -2334,6 +2353,8 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -input-recording-capture-directory <path>: Sets the root directory for replay marker captures.\n");
 	std::fprintf(stderr, "  -input-recording-capture-mode <full|screenshots|savestates>: Enables L3+R3 marker capture with both outputs, screenshots only, or savestates only.\n");
 	std::fprintf(stderr, "  -input-recording-capture-markers <spec>: Captures only the specified 1-based marker numbers and ranges (for example, 1,3-5).\n");
+	std::fprintf(stderr, "  -input-recording-video <path.mkv>: Writes lossless video and audio during power-on replay.\n");
+	std::fprintf(stderr, "  -input-recording-video-frames <first>-<last>: Selects an inclusive range of recording frame counters (0..total), then shuts down.\n");
 	std::fprintf(stderr, "  -input-recording-create <path>: Creates at an exact absolute path or a path relative to the primary InputRecordings folder.\n");
 	std::fprintf(stderr, "  -fullscreen: Enters fullscreen mode immediately after starting.\n");
 	std::fprintf(stderr, "  -nofullscreen: Prevents fullscreen mode from triggering if enabled.\n");
@@ -2616,6 +2637,28 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				AutoBoot(autoboot)->input_recording_capture_markers = std::move(markers.value());
 				continue;
 			}
+			else if (CHECK_ARG_PARAM(QStringLiteral("-input-recording-video")))
+			{
+				const std::string path = (++it)->toStdString();
+				if (path.empty() || !StringUtil::compareNoCase(Path::GetExtension(path), "mkv"))
+				{
+					std::fprintf(stderr, "Input recording video path must name an .mkv file.\n");
+					return false;
+				}
+				AutoBoot(autoboot)->input_recording_video = path;
+				continue;
+			}
+			else if (CHECK_ARG_PARAM(QStringLiteral("-input-recording-video-frames")))
+			{
+				const auto frames = ParseInputRecordingVideoFrames((++it)->toStdString());
+				if (!frames)
+				{
+					std::fprintf(stderr, "Input recording video frames must be an inclusive first-last range of nonnegative frame counters.\n");
+					return false;
+				}
+				AutoBoot(autoboot)->input_recording_video_frames = frames;
+				continue;
+			}
 			else if (CHECK_ARG_PARAM(QStringLiteral("-input-recording-create")))
 			{
 				const std::string filename = (++it)->toStdString();
@@ -2828,6 +2871,21 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 		QMessageBox::critical(nullptr, QStringLiteral("Error"),
 			QStringLiteral("Input recording capture options require -input-recording playback."));
 		return false;
+	}
+	if (autoboot && (!autoboot->input_recording_video.empty() || autoboot->input_recording_video_frames))
+	{
+		if (autoboot->input_recording_video.empty() || !autoboot->input_recording_video_frames ||
+			autoboot->input_recording.empty() || autoboot->create_input_recording || s_agent_replay_mode)
+		{
+			std::fprintf(stderr, "Input recording video capture requires -input-recording, -input-recording-video, and -input-recording-video-frames, without -agent-replay.\n");
+			return false;
+		}
+		if (!autoboot->source_type.has_value() && autoboot->filename.empty() && autoboot->elf_override.empty())
+		{
+			std::fprintf(stderr, "Input recording video capture requires a boot filename or -bios.\n");
+			return false;
+		}
+		s_input_recording_video_requested = true;
 	}
 	if (FileMcd_IsVolatileMode() && explicit_discard_memory_card_writes)
 	{
@@ -3100,6 +3158,11 @@ shutdown_and_exit:
 	if (s_base_settings_interface->IsDirty())
 		s_base_settings_interface->Save();
 
+	if (s_input_recording_video_requested && !g_InputRecording.didVideoCaptureComplete())
+	{
+		Console.Error("Input recording video capture did not complete successfully.");
+		return EXIT_FAILURE;
+	}
 	return result;
 }
 

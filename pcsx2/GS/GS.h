@@ -82,6 +82,7 @@ void GSQueueSnapshotToFile(const std::string& path, std::function<void(bool)> ca
 void GSWriteSavestateGSDump(std::function<void(std::vector<u8>)> data_callback);
 void GSStopGSDump();
 bool GSBeginCapture(std::string filename, bool force_audio_video = false);
+bool GSBeginReplayCapture(std::string filename);
 bool GSEndCapture();
 void GSPresentCurrentFrame();
 void GSThrottlePresentation();

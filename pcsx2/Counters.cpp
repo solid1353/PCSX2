@@ -494,7 +494,11 @@ static __fi void VSyncStart(u64 sCycle)
 	if (!VMManager::Internal::IsExecutionInterrupted())
 		VMManager::Internal::Throttle();
 
+	// Put capture commands on the same GS queue as this completed recording frame.
+	g_InputRecording.prepareVideoFrame();
 	gsPostVsyncStart(); // MUST be after framelimit; doing so before causes funk with frame times!
+
+	g_InputRecording.finishVideoFrame();
 
 	// Poll input after MTGS frame push, just in case it has to stall to catch up.
 	VMManager::Internal::PollInputOnCPUThread();

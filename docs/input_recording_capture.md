@@ -1,7 +1,7 @@
 # Input recording capture
 
 The fork changes how input recordings are opened from the command line and
-adds marker capture during replay. The implementation is in
+adds marker and frame-exact video capture during replay. The implementation is in
 `pcsx2/Recording/` and the option parsing in `pcsx2-qt/QtHost.cpp`.
 
 ## Recording paths
@@ -26,6 +26,54 @@ When a replay reaches its last frame, PCSX2 pauses. Resuming at that point
 ends the replay. With a capture directory, PCSX2 instead closes the recording
 after the final frame and shuts the VM down, which exits a batch-mode
 process.
+
+## Frame-exact video
+
+`-input-recording-video <path.mkv> -input-recording-video-frames <first>-<last>`
+writes one Matroska file during `-input-recording` playback. Both options are
+required, together with a boot filename or `-bios`. The parent directory must
+already exist; an existing output file is replaced. Relative output paths
+resolve from the process's working directory.
+
+The range is inclusive and uses `InputRecording::m_frame_counter`, the same
+counter shown by the `Frame: N/total` OSD. Valid counters are `0` through
+`total`, including single-frame ranges such as `120-120`. Counter zero is the
+initial power-on interval, before the first replay input poll. Each counter
+selects the image at the VSync ending that interval and every SPU2 sample
+generated during it. `120-179` therefore writes exactly 60 video frames.
+Only power-on recordings are accepted, and ranges beyond the recording fail.
+
+Capture uses fixed 640 x 480 frames, single-threaded lossless FFV1 in RGB,
+and stereo PCM float audio at the emulated console's sample rate. It ignores
+the desktop capture codec, resolution, bitrate, and encoder-parameter settings.
+Codec and container bitexact flags exclude wall-clock muxing metadata. The
+recording's existing fixed RTC applies; it advances with emulated VSyncs.
+Use the same emulator build, rendering settings, BIOS, ISO, PNACHs, and initial
+card contents for repeated takes. Persistent card writes can change the next
+run's initial state; discarded or volatile writes preserve the source card.
+
+`-surfaceless`, `-mute`, speed options (including Unlimited), launch PNACHs,
+and all memory card modes work with video capture. Audio is collected directly
+from SPU2 before host buffering, volume, mute, or time stretching. Start,
+sample delivery, and stop are ordered with the selected GS VSyncs; skipped
+presentation does not omit video frames. GS resets and renderer switches keep
+the same output file and encoder timestamps. Concurrent processes can share the
+read-only recording and must use separate output paths.
+
+After the final selected frame, PCSX2 drains the encoder, closes the file,
+logs `Input recording video capture complete: N frames written to 'path'.`,
+and shuts down the VM. `-batch` (also implied by `-surfaceless`) then exits.
+Capture failures log an error, shut down, and exit with a nonzero process status,
+including startup failures and interrupted captures. Successful batch capture
+exits with status zero. Capture playback starts running even if **Start Paused**
+is enabled, and does not require the recording tools setting. Capture requires
+the FFmpeg runtime with FFV1 and PCM float encoders. It cannot accompany
+`-agent-replay`.
+Marker capture may accompany video, but savestate creation can affect a game's
+rendering; use video alone for takes that must avoid those side effects.
+Repeated decoded video/audio equality, capture timing, and renderer switches
+still need proper runtime testing; unit tests cover parsing and validation,
+not encoder or emulator output.
 
 ## Marker capture
 
@@ -94,6 +142,8 @@ it with the other state files.
   direct ones, and discarding unfinished dumps.
 - `tests/ctest/core/input_recording_tests.cpp` covers concurrent read-only
   playback, the record-mode lock during playback, capture mode and marker
-  parsing, marker selection, and capture directories.
+  parsing, marker selection, capture directories, and inclusive video frame
+  ranges (including zero, equal endpoints, malformed ranges, and overflow),
+  plus rejection of invalid capture options and savestate recordings before boot.
 - `tests/ctest/core/patch_tests.cpp` (`InputRecordingPath` tests) covers exact
   absolute paths and relative paths below the primary folder.

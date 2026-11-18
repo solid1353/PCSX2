@@ -262,7 +262,11 @@ bool GSreopen(bool recreate_device, bool recreate_renderer, GSRendererType new_r
 	std::string capture_filename;
 	GSVector2i capture_size;
 	bool force_audio_video = false;
-	if (GSCapture::IsCapturing())
+	if (GSCapture::IsRecordingReplay())
+	{
+		GSCapture::PrepareForGSReopen();
+	}
+	else if (GSCapture::IsCapturing())
 	{
 		capture_filename = GSCapture::GetNextCaptureFileName();
 		capture_size = GSCapture::GetSize();
@@ -387,7 +391,7 @@ void GSreset(bool hardware_reset)
 
 	// Restart video capture if it's been started.
 	// Otherwise we get a buildup of audio frames from the CPU thread.
-	if (hardware_reset && GSCapture::IsCapturing())
+	if (hardware_reset && GSCapture::IsCapturing() && !GSCapture::IsRecordingReplay())
 	{
 		std::string next_filename = GSCapture::GetNextCaptureFileName();
 		const GSVector2i size = GSCapture::GetSize();
@@ -520,6 +524,11 @@ bool GSBeginCapture(std::string filename, bool force_audio_video)
 bool GSEndCapture()
 {
 	return g_gs_renderer && g_gs_renderer->EndCapture();
+}
+
+bool GSBeginReplayCapture(std::string filename)
+{
+	return g_gs_renderer && g_gs_renderer->BeginCapture(std::move(filename), GSVector2i(640, 480), true, true);
 }
 
 void GSPresentCurrentFrame()

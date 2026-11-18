@@ -31,10 +31,12 @@ bool SaveStateBase::InputRecordingFreeze()
 #include "VMManager.h"
 #include "Host.h"
 #include "ImGui/ImGuiOverlays.h"
+#include "ImGui/FullscreenUI.h"
 #include "DebugTools/Debug.h"
 #include "GameDatabase.h"
 #include "fmt/format.h"
 #include "GS.h"
+#include "GS/GSCapture.h"
 #include "Host.h"
 
 #include <algorithm>
@@ -50,6 +52,24 @@ std::optional<InputRecordingCaptureMode> ParseInputRecordingCaptureMode(const st
 	if (value == "savestates")
 		return InputRecordingCaptureMode::Savestates;
 	return std::nullopt;
+}
+
+std::optional<InputRecordingVideoFrameRange> ParseInputRecordingVideoFrames(const std::string_view value)
+{
+	const size_t separator = value.find('-');
+	if (separator == std::string_view::npos)
+		return std::nullopt;
+	InputRecordingVideoFrameRange range;
+	const auto parse = [](std::string_view part, u32& result) {
+		const auto parsed = std::from_chars(part.data(), part.data() + part.size(), result);
+		return !part.empty() && parsed.ec == std::errc() && parsed.ptr == part.data() + part.size();
+	};
+	if (!parse(value.substr(0, separator), range.first) || !parse(value.substr(separator + 1), range.last) ||
+		range.first > range.last)
+	{
+		return std::nullopt;
+	}
+	return range;
 }
 
 std::optional<InputRecordingCaptureMarkerRanges> ParseInputRecordingCaptureMarkers(const std::string_view value)
@@ -238,8 +258,10 @@ bool InputRecording::create(const std::string& fileName, const bool fromSaveStat
 }
 
 bool InputRecording::play(const std::string& filename, bool capture_markers, const std::string& capture_directory,
-	const InputRecordingCaptureMode capture_mode, const InputRecordingCaptureMarkerRanges& capture_marker_ranges)
+	const InputRecordingCaptureMode capture_mode, const InputRecordingCaptureMarkerRanges& capture_marker_ranges,
+	const std::string& video_path, std::optional<InputRecordingVideoFrameRange> video_frames)
 {
+	m_video_complete = false;
 	m_capture_markers = false;
 	m_capture_marker_down = false;
 	m_capture_mode = capture_mode;
@@ -254,6 +276,18 @@ bool InputRecording::play(const std::string& filename, bool capture_markers, con
 	{
 		return false;
 	}
+	if (video_path.empty() != !video_frames.has_value() ||
+		(video_frames && (m_file.fromSaveState() || video_frames->first > video_frames->last ||
+							 video_frames->last > m_file.getTotalFrames() || !StringUtil::compareNoCase(Path::GetExtension(video_path), "mkv"))))
+	{
+		Console.Error("Input recording video capture requires a power-on replay, an .mkv path, and a frame range within 0..total.");
+		m_file.close();
+		return false;
+	}
+	m_video_path = video_path;
+	m_video_frames = video_frames;
+	m_video_audio.clear();
+	m_video_started = false;
 
 	if (capture_markers && m_file.fromSaveState())
 	{
@@ -286,6 +320,7 @@ bool InputRecording::play(const std::string& filename, bool capture_markers, con
 		m_capture_markers = true;
 		m_exit_on_replay_completion = !capture_directory.empty();
 	}
+	m_exit_on_replay_completion |= video_frames.has_value();
 
 	// Either load the savestate, or restart the game
 	if (m_file.fromSaveState())
@@ -336,6 +371,18 @@ void InputRecording::closeActiveFile()
 	{
 		return;
 	}
+	if (m_video_frames)
+	{
+		if (m_video_started)
+		{
+			MTGS::RunOnGSThread(&GSEndCapture);
+			MTGS::WaitGS(false);
+		}
+		Console.Error("Input recording video capture stopped before its final frame.");
+		m_video_started = false;
+	}
+	m_video_frames.reset();
+	m_video_audio.clear();
 	if (m_file.close())
 	{
 		m_is_active = false;
@@ -461,6 +508,61 @@ void InputRecording::processRecordQueue()
 	}
 }
 
+void InputRecording::prepareVideoFrame()
+{
+	if (!isCapturingVideo() || m_frame_counter < m_video_frames->first || m_frame_counter > m_video_frames->last)
+		return;
+
+	bool okay = true;
+	MTGS::RunOnGSThread([this, samples = std::move(m_video_audio), &okay]() {
+		if (!m_video_started)
+			okay = GSBeginReplayCapture(m_video_path);
+		if (okay)
+			okay = GSCapture::DeliverReplayAudio(samples);
+	});
+	MTGS::WaitGS(false);
+	m_video_audio.clear();
+	if (!okay)
+	{
+		Console.Error("Input recording video capture failed to start or write audio.");
+		// Close a partially opened capture too, before batch shutdown.
+		MTGS::RunOnGSThread(&GSEndCapture);
+		MTGS::WaitGS(false);
+		m_video_started = false;
+		m_video_frames.reset();
+		closeActiveFile();
+		Host::RequestVMShutdown(false, false, false);
+		Host::RequestExitApplication(false);
+		return;
+	}
+	m_video_started = true;
+}
+
+void InputRecording::finishVideoFrame()
+{
+	if (!isCapturingVideo() || m_frame_counter != m_video_frames->last)
+		return;
+
+	const s64 expected = static_cast<s64>(m_video_frames->last) - m_video_frames->first + 1;
+	bool okay = false;
+	MTGS::RunOnGSThread([expected, &okay]() {
+		const bool complete = GSCapture::IsCapturing() && GSCapture::GetVideoFrameCount() == expected;
+		okay = GSEndCapture() && complete;
+	});
+	MTGS::WaitGS(false);
+	m_video_complete = okay;
+	if (okay)
+		Console.WriteLnFmt("Input recording video capture complete: {} frames written to '{}'.", expected, m_video_path);
+	else
+		Console.Error("Input recording video capture failed to write and finalize every requested frame.");
+	m_video_started = false;
+	m_video_frames.reset();
+	closeActiveFile();
+	Host::RequestVMShutdown(false, false, false);
+	if (!okay)
+		Host::RequestExitApplication(false);
+}
+
 void InputRecording::incFrameCounter()
 {
 	if (!m_is_active)
@@ -480,7 +582,7 @@ void InputRecording::incFrameCounter()
 	{
 		InformGSThread();
 		// If we've reached the end of the recording while replaying, pause or close after the final frame completes.
-		if (m_frame_counter == m_file.getTotalFrames())
+		if (!m_video_frames && m_frame_counter == m_file.getTotalFrames())
 		{
 			if (m_exit_on_replay_completion)
 			{
@@ -550,6 +652,7 @@ void InputRecording::handleExceededFrameCounter()
 
 void InputRecording::handleReset()
 {
+	m_video_audio.clear();
 	if (m_initial_load_complete)
 	{
 		adjustFrameCounterOnReRecord(0);

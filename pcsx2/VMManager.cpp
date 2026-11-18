@@ -3444,7 +3444,7 @@ void VMManager::Internal::PollInputOnCPUThread()
 	InputManager::PollSources();
 	PINEServer::AgentControl::ApplyOverridesAfterInputPoll();
 
-	if (EmuConfig.EnableRecordingTools)
+	if (EmuConfig.EnableRecordingTools || g_InputRecording.isCapturingVideo())
 	{
 		// This code is called _before_ Counter's vsync end, and _after_ vsync start
 		if (g_InputRecording.isActive())

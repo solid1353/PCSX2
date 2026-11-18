@@ -177,6 +177,7 @@ namespace GSCapture
 	static std::atomic_bool s_capturing{false};
 	static std::atomic_bool s_encoding_error{false};
 	static bool s_force_audio_video = false;
+	static bool s_recording_replay = false;
 	static bool s_wrote_media = false;
 
 	static AVFormatContext* s_format_context = nullptr;
@@ -374,7 +375,8 @@ bool GSCapture::IsUsingHardwareVideoEncoding()
 	return (s_video_hw_context != nullptr);
 }
 
-bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float aspect, std::string filename, bool force_audio_video)
+bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float aspect, std::string filename,
+	bool force_audio_video, bool recording_replay)
 {
 	const bool capture_video = force_audio_video || GSConfig.EnableVideoCapture;
 	const bool capture_audio = force_audio_video || GSConfig.EnableAudioCapture;
@@ -390,6 +392,7 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 	std::unique_lock<std::mutex> lock(s_lock);
 
 	InternalEndCapture(lock);
+	s_recording_replay = recording_replay;
 	if (!LoadFFmpeg(!force_audio_video))
 		return false;
 
@@ -411,6 +414,8 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		InternalEndCapture(lock);
 		return false;
 	}
+	if (recording_replay)
+		s_format_context->flags |= AVFMT_FLAG_BITEXACT;
 
 	// find the codec id
 	if (capture_video)
@@ -418,7 +423,9 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		const float sample_aspect_ratio = aspect / (static_cast<float>(s_size.x) / static_cast<float>(s_size.y));
 
 		const AVCodec* vcodec = nullptr;
-		if (!GSConfig.VideoCaptureCodec.empty())
+		if (recording_replay)
+			vcodec = wrap_avcodec_find_encoder(AV_CODEC_ID_FFV1);
+		else if (!GSConfig.VideoCaptureCodec.empty())
 		{
 			vcodec = wrap_avcodec_find_encoder_by_name(GSConfig.VideoCaptureCodec.c_str());
 			if (!vcodec)
@@ -430,9 +437,9 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 
 		// FFmpeg decides whether mp4, mkv, etc should use h264 or mpeg4 as their default codec by whether x264 was enabled
 		// But there's a lot of other h264 encoders (e.g. hardware encoders) we may want to use instead
-		if (!vcodec && wrap_avformat_query_codec(output_format, AV_CODEC_ID_H264, FF_COMPLIANCE_NORMAL))
+		if (!recording_replay && !vcodec && wrap_avformat_query_codec(output_format, AV_CODEC_ID_H264, FF_COMPLIANCE_NORMAL))
 			vcodec = wrap_avcodec_find_encoder(AV_CODEC_ID_H264);
-		if (!vcodec)
+		if (!recording_replay && !vcodec)
 			vcodec = wrap_avcodec_find_encoder(output_format->video_codec);
 
 		if (!vcodec)
@@ -451,7 +458,12 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		}
 
 		s_video_codec_context->codec_type = AVMEDIA_TYPE_VIDEO;
-		s_video_codec_context->bit_rate = GSConfig.VideoCaptureBitrate * 1000;
+		if (recording_replay)
+		{
+			s_video_codec_context->flags |= AV_CODEC_FLAG_BITEXACT;
+			s_video_codec_context->thread_count = 1;
+		}
+		s_video_codec_context->bit_rate = recording_replay ? 0 : GSConfig.VideoCaptureBitrate * 1000;
 		s_video_codec_context->width = s_size.x;
 		s_video_codec_context->height = s_size.y;
 		s_video_codec_context->sample_aspect_ratio = wrap_av_d2q(sample_aspect_ratio, 100000);
@@ -459,7 +471,8 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 			static_cast<s64>(static_cast<double>(fps) * 10000.0), std::numeric_limits<s32>::max());
 
 		// Default to NV12 if not overridden by the user
-		const AVPixelFormat preferred_sw_pix_fmt = GSConfig.VideoCaptureFormat.empty() ? AV_PIX_FMT_NV12 : static_cast<AVPixelFormat>(std::stoi(GSConfig.VideoCaptureFormat));
+		const AVPixelFormat preferred_sw_pix_fmt = recording_replay ? AV_PIX_FMT_BGR0 :
+		                                                              (GSConfig.VideoCaptureFormat.empty() ? AV_PIX_FMT_NV12 : static_cast<AVPixelFormat>(std::stoi(GSConfig.VideoCaptureFormat)));
 		AVPixelFormat sw_pix_fmt = preferred_sw_pix_fmt;
 		if (vcodec->pix_fmts)
 		{
@@ -476,6 +489,12 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 
 		if (sw_pix_fmt == AV_PIX_FMT_VAAPI)
 			sw_pix_fmt = AV_PIX_FMT_NV12;
+		if (recording_replay && sw_pix_fmt != AV_PIX_FMT_BGR0)
+		{
+			Console.Error("Input recording video capture requires FFV1 with lossless RGB support.");
+			InternalEndCapture(lock);
+			return false;
+		}
 
 		s_video_codec_context->pix_fmt = sw_pix_fmt;
 
@@ -483,7 +502,7 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 			Console.Warning("GSCapture: preferred pixel format (%d) was unsupported by the codec. Using (%d) instead.", preferred_sw_pix_fmt, sw_pix_fmt);
 
 		// Can we use hardware encoding?
-		const AVCodecHWConfig* hwconfig = wrap_avcodec_get_hw_config(vcodec, 0);
+		const AVCodecHWConfig* hwconfig = recording_replay ? nullptr : wrap_avcodec_get_hw_config(vcodec, 0);
 		if (hwconfig && hwconfig->pix_fmt != AV_PIX_FMT_NONE && hwconfig->pix_fmt != sw_pix_fmt)
 		{
 			// First index isn't our preferred pixel format, try the others, but fall back if one doesn't exist.
@@ -498,7 +517,7 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 			}
 		}
 
-		if (GSConfig.EnableVideoCaptureParameters)
+		if (!recording_replay && GSConfig.EnableVideoCaptureParameters)
 		{
 			res = wrap_av_dict_parse_string(&s_video_codec_arguments, GSConfig.VideoCaptureParameters.c_str(), "=", ":", 0);
 			if (res < 0)
@@ -653,7 +672,9 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 			s_audio_buffer = std::make_unique<float[]>(AUDIO_BUFFER_SIZE * AUDIO_CHANNELS);
 
 		const AVCodec* acodec = nullptr;
-		if (!GSConfig.AudioCaptureCodec.empty())
+		if (recording_replay)
+			acodec = wrap_avcodec_find_encoder(AV_CODEC_ID_PCM_F32LE);
+		else if (!GSConfig.AudioCaptureCodec.empty())
 		{
 			acodec = wrap_avcodec_find_encoder_by_name(GSConfig.AudioCaptureCodec.c_str());
 			if (!acodec)
@@ -662,7 +683,7 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 					fmt::format("Audio codec {} not found, using default.", GSConfig.VideoCaptureCodec), Host::OSD_ERROR_DURATION);
 			}
 		}
-		if (!acodec)
+		if (!recording_replay && !acodec)
 			acodec = wrap_avcodec_find_encoder(output_format->audio_codec);
 		if (!acodec)
 		{
@@ -681,7 +702,12 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 
 		const s32 sample_rate = SPU2::GetConsoleSampleRate();
 		s_audio_codec_context->codec_type = AVMEDIA_TYPE_AUDIO;
-		s_audio_codec_context->bit_rate = GSConfig.AudioCaptureBitrate * 1000;
+		if (recording_replay)
+		{
+			s_audio_codec_context->flags |= AV_CODEC_FLAG_BITEXACT;
+			s_audio_codec_context->thread_count = 1;
+		}
+		s_audio_codec_context->bit_rate = recording_replay ? 0 : GSConfig.AudioCaptureBitrate * 1000;
 		s_audio_codec_context->sample_fmt = AV_SAMPLE_FMT_FLT;
 		s_audio_codec_context->sample_rate = sample_rate;
 		s_audio_codec_context->time_base = {1, sample_rate};
@@ -703,6 +729,12 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		}
 		if (!supports_format)
 		{
+			if (recording_replay)
+			{
+				Console.Error("Input recording video capture requires packed PCM float audio support.");
+				InternalEndCapture(lock);
+				return false;
+			}
 			Console.WriteLn(fmt::format("Audio codec '{}' does not support float samples, using default.", acodec->name));
 			s_audio_codec_context->sample_fmt = acodec->sample_fmts[0];
 			s_swr_context = wrap_swr_alloc();
@@ -737,7 +769,7 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 
 		// TODO: Check channel layout support
 
-		if (GSConfig.EnableAudioCaptureParameters)
+		if (!recording_replay && GSConfig.EnableAudioCaptureParameters)
 		{
 			res = wrap_av_dict_parse_string(&s_audio_codec_arguments, GSConfig.AudioCaptureParameters.c_str(), "=", ":", 0);
 			if (res < 0)
@@ -760,11 +792,11 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		}
 
 		// Use packet size for frame if it supports it... but most don't.
-		if (acodec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
+		if (recording_replay || (acodec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE))
 			s_audio_frame_size = AudioStream::CHUNK_SIZE;
 		else
 			s_audio_frame_size = s_audio_codec_context->frame_size;
-		if (s_audio_frame_size >= AUDIO_BUFFER_SIZE)
+		if (s_audio_frame_size == 0 || s_audio_frame_size >= AUDIO_BUFFER_SIZE)
 		{
 			LogAVError(AVERROR(EINVAL), "Audio frame size %u exceeds buffer size %u", s_audio_frame_size, AUDIO_BUFFER_SIZE);
 			InternalEndCapture(lock);
@@ -847,7 +879,7 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		fmt::format(TRANSLATE_FS("GSCapture", "Starting {} to '{}'."), GetCaptureTypeForMessage(capture_video, capture_audio), Path::GetFileName(s_filename)),
 		Host::OSD_INFO_DURATION);
 
-	if (capture_audio)
+	if (capture_audio && !recording_replay)
 		SPU2::SetAudioCaptureActive(true);
 
 	s_force_audio_video = force_audio_video;
@@ -957,11 +989,11 @@ void GSCapture::EncoderThreadEntryPoint()
 		bool okay = !s_encoding_error;
 
 		// If the frame failed to map, this will be false, and we'll just skip it.
-		if (okay && s_video_stream && pf.tex->IsMapped())
-			okay = SendFrame(pf);
+		if (okay && s_video_stream)
+			okay = pf.tex->IsMapped() ? SendFrame(pf) : !s_recording_replay;
 
 		// Encode as many audio frames while the video is ahead.
-		if (okay && s_audio_stream)
+		if (okay && s_audio_stream && !s_recording_replay)
 			okay = ProcessAudioPackets(pf.pts);
 
 		lock.lock();
@@ -1011,7 +1043,12 @@ bool GSCapture::SendFrame(const PendingFrame& pf)
 	const int source_pitch = static_cast<int>(pf.tex->GetMapPitch());
 
 	// In case a previous frame is still using the frame.
-	wrap_av_frame_make_writable(s_converted_video_frame);
+	const int writable_result = wrap_av_frame_make_writable(s_converted_video_frame);
+	if (writable_result < 0)
+	{
+		LogAVError(writable_result, "av_frame_make_writable() for video failed: ");
+		return false;
+	}
 
 	s_sws_context = wrap_sws_getCachedContext(s_sws_context, source_width, source_height, source_format, s_converted_video_frame->width,
 		s_converted_video_frame->height, static_cast<AVPixelFormat>(s_converted_video_frame->format), SWS_BICUBIC, nullptr, nullptr, nullptr);
@@ -1021,8 +1058,12 @@ bool GSCapture::SendFrame(const PendingFrame& pf)
 		return false;
 	}
 
-	wrap_sws_scale(s_sws_context, reinterpret_cast<const u8**>(&source_ptr), &source_pitch, 0, source_height, s_converted_video_frame->data,
-		s_converted_video_frame->linesize);
+	if (wrap_sws_scale(s_sws_context, reinterpret_cast<const u8**>(&source_ptr), &source_pitch, 0, source_height,
+			s_converted_video_frame->data, s_converted_video_frame->linesize) != s_converted_video_frame->height)
+	{
+		Console.Error("GSCapture: Failed to convert the complete video frame.");
+		return false;
+	}
 
 	AVFrame* frame_to_send = s_converted_video_frame;
 	if (IsUsingHardwareVideoEncoding())
@@ -1138,6 +1179,48 @@ void GSCapture::DeliverAudioPacket(const float* frames)
 		s_frames_pending_encode++;
 		s_frame_ready_cv.notify_one();
 	}
+}
+
+bool GSCapture::DeliverReplayAudio(const std::vector<float>& samples)
+{
+	std::unique_lock lock(s_lock);
+	if (!s_capturing.load(std::memory_order_acquire) || !s_recording_replay || s_encoding_error)
+		return false;
+
+	// Replay supplies the exact SPU2 samples of one emulated frame on the GS queue.
+	// Drain the encoder before accessing its frame and muxer, including the final partial PCM packet.
+	ProcessAllInFlightFrames(lock);
+	if (s_encoding_error)
+		return false;
+	for (size_t pos = 0; pos < samples.size();)
+	{
+		const u32 count = static_cast<u32>(std::min<size_t>(s_audio_frame_size, (samples.size() - pos) / AUDIO_CHANNELS));
+		s_converted_audio_frame->nb_samples = s_audio_frame_size;
+		if (wrap_av_frame_make_writable(s_converted_audio_frame) < 0)
+		{
+			s_encoding_error = true;
+			return false;
+		}
+		std::memcpy(s_converted_audio_frame->data[0], samples.data() + pos, count * AUDIO_CHANNELS * sizeof(float));
+		s_converted_audio_frame->nb_samples = count;
+		s_converted_audio_frame->pts = s_next_audio_pts;
+		s_next_audio_pts += count;
+		const int res = wrap_avcodec_send_frame(s_audio_codec_context, s_converted_audio_frame);
+		if (res < 0 || !ReceivePackets(s_audio_codec_context, s_audio_stream, s_audio_packet))
+		{
+			if (res < 0)
+				LogAVError(res, "avcodec_send_frame() for replay audio failed: ");
+			s_encoding_error = true;
+			return false;
+		}
+		pos += count * AUDIO_CHANNELS;
+	}
+	return true;
+}
+
+s64 GSCapture::GetVideoFrameCount()
+{
+	return s_next_video_pts;
 }
 
 bool GSCapture::ProcessAudioPackets(s64 video_pts)
@@ -1373,6 +1456,7 @@ bool GSCapture::InternalEndCapture(std::unique_lock<std::mutex>& lock)
 	finalized = finalized && s_wrote_media && FileSystem::OpenManagedCFile(s_filename.c_str(), "rb");
 	s_filename.clear();
 	s_force_audio_video = false;
+	s_recording_replay = false;
 	s_wrote_media = false;
 	return finalized;
 }
@@ -1392,6 +1476,11 @@ bool GSCapture::EndCapture()
 bool GSCapture::IsCapturing()
 {
 	return s_capturing.load(std::memory_order_acquire);
+}
+
+bool GSCapture::IsRecordingReplay()
+{
+	return IsCapturing() && s_recording_replay;
 }
 
 bool GSCapture::IsForcingAudioVideo()
@@ -1497,6 +1586,16 @@ void GSCapture::Flush()
 		s_audio_buffer_write_pos = 0;
 		s_audio_buffer_size.store(0, std::memory_order_release);
 	}
+}
+
+void GSCapture::PrepareForGSReopen()
+{
+	std::unique_lock lock(s_lock);
+	ProcessAllInFlightFrames(lock);
+	// Download textures belong to the old device. Keep the codecs, timestamps, and file open.
+	// Replay across automatic renderer switches still needs proper runtime testing.
+	for (PendingFrame& frame : s_pending_frames)
+		frame.tex.reset();
 }
 
 GSCapture::CodecList GSCapture::GetCodecListForContainer(const char* container, AVMediaType type)

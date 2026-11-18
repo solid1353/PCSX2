@@ -12,6 +12,7 @@
 #include <array>
 #include <chrono>
 #include <filesystem>
+#include <tuple>
 
 namespace
 {
@@ -67,6 +68,43 @@ TEST(InputRecordingControls, PreventsRecordModeForReadOnlyPlayback)
 	EXPECT_TRUE(controls.isRecording());
 }
 
+TEST_F(InputRecordingFileTest, RejectsInvalidVideoCaptureBeforeStartingVM)
+{
+	InputRecordingFile recording;
+	ASSERT_TRUE(recording.openNew(m_path, false));
+	ASSERT_TRUE(recording.writeHeader());
+	recording.setTotalFrames(10);
+	ASSERT_TRUE(recording.close());
+
+	for (const auto& [path, frames] : {
+			 std::tuple{"capture.mkv", std::optional<InputRecordingVideoFrameRange>{}},
+			 std::tuple{"", std::optional<InputRecordingVideoFrameRange>{{0, 0}}},
+			 std::tuple{"capture.mp4", std::optional<InputRecordingVideoFrameRange>{{0, 0}}},
+			 std::tuple{"capture.mkv", std::optional<InputRecordingVideoFrameRange>{{0, 11}}},
+			 std::tuple{"capture.mkv", std::optional<InputRecordingVideoFrameRange>{{5, 4}}}})
+	{
+		InputRecording playback;
+		EXPECT_FALSE(playback.play(m_path, false, {}, InputRecordingCaptureMode::Full, {}, path, frames));
+		EXPECT_FALSE(playback.isActive());
+		EXPECT_FALSE(playback.isCapturingVideo());
+		EXPECT_FALSE(playback.didVideoCaptureComplete());
+	}
+}
+
+TEST_F(InputRecordingFileTest, RejectsSavestateVideoCaptureBeforeStartingVM)
+{
+	InputRecordingFile recording;
+	ASSERT_TRUE(recording.openNew(m_path, true));
+	ASSERT_TRUE(recording.writeHeader());
+	ASSERT_TRUE(recording.close());
+
+	InputRecording playback;
+	EXPECT_FALSE(playback.play(m_path, false, {}, InputRecordingCaptureMode::Full, {}, "capture.mkv",
+		InputRecordingVideoFrameRange{0, 0}));
+	EXPECT_FALSE(playback.isActive());
+	EXPECT_FALSE(playback.didVideoCaptureComplete());
+}
+
 TEST(InputRecordingCapture, ParsesSupportedModes)
 {
 	const std::optional<InputRecordingCaptureMode> full = ParseInputRecordingCaptureMode("full");
@@ -91,6 +129,28 @@ TEST(InputRecordingCapture, ParsesAndNormalizesMarkerSelection)
 	EXPECT_EQ(markers->at(0).last, 7u);
 	EXPECT_EQ(markers->at(1).first, 9u);
 	EXPECT_EQ(markers->at(1).last, 9u);
+}
+
+TEST(InputRecordingCapture, ParsesInclusiveVideoFrameCounters)
+{
+	for (const auto [text, first, last] : {
+			 std::tuple{"0-0", 0u, 0u}, std::tuple{"1-1", 1u, 1u}, std::tuple{"120-179", 120u, 179u},
+			 std::tuple{"0-4294967295", 0u, 4294967295u}})
+	{
+		const auto range = ParseInputRecordingVideoFrames(text);
+		ASSERT_TRUE(range.has_value()) << text;
+		EXPECT_EQ(range->first, first);
+		EXPECT_EQ(range->last, last);
+	}
+}
+
+TEST(InputRecordingCapture, RejectsInvalidVideoFrameRanges)
+{
+	for (const std::string_view value : {"", "1", "-1", "1-", "2-1", "1--2", "-1-2", "+1-2", "1-2,4-5",
+			 "1-2-3", " 1-2", "1-2 ", "1 -2", "1- 2", "a-b", "0-4294967296", "4294967296-4294967296"})
+	{
+		EXPECT_FALSE(ParseInputRecordingVideoFrames(value).has_value()) << value;
+	}
 }
 
 TEST(InputRecordingCapture, RejectsInvalidMarkerSelection)

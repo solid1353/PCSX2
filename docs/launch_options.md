@@ -8,6 +8,14 @@ Input recording options are described in
 [input recording capture](input_recording_capture.md), and `-pnach` and
 `-pnach-line` in [PNACH files](pnach.md).
 
+`-input-recording-video <path.mkv> -input-recording-video-frames <first>-<last>`
+captures an inclusive range of the power-on recording's frame counter
+(`0..total`) with lossless video and emulated audio, then shuts down the VM.
+Both options, `-input-recording <recording>`, and a boot filename or `-bios`
+are required. Capture failures exit nonzero; successful batch capture exits zero. See
+[frame-exact video](input_recording_capture.md#frame-exact-video) for output,
+completion, and determinism details.
+
 ## Process overrides
 
 | Option | Effect |

@@ -21,3 +21,9 @@ struct InputRecordingCaptureMarkerRange
 };
 
 using InputRecordingCaptureMarkerRanges = std::vector<InputRecordingCaptureMarkerRange>;
+
+struct InputRecordingVideoFrameRange
+{
+	u32 first;
+	u32 last;
+};

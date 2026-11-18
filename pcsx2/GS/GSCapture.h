@@ -19,12 +19,16 @@ class GSDownloadTexture;
 
 namespace GSCapture
 {
-	bool BeginCapture(float fps, GSVector2i recommendedResolution, float aspect, std::string filename, bool force_audio_video);
+	bool BeginCapture(float fps, GSVector2i recommendedResolution, float aspect, std::string filename, bool force_audio_video,
+		bool recording_replay = false);
+	bool DeliverReplayAudio(const std::vector<float>& samples);
+	s64 GetVideoFrameCount();
 	bool DeliverVideoFrame(GSTexture* stex);
 	void DeliverAudioPacket(const float* frames); // AudioStream::CHUNK_SIZE
 	bool EndCapture();
 
 	bool IsCapturing();
+	bool IsRecordingReplay();
 	bool IsForcingAudioVideo();
 	bool IsCapturingVideo();
 	bool IsCapturingAudio();
@@ -33,6 +37,7 @@ namespace GSCapture
 	GSVector2i GetSize();
 	std::string GetNextCaptureFileName();
 	void Flush();
+	void PrepareForGSReopen();
 
 	using CodecName = std::pair<std::string, std::string>; // shortname,longname
 	using CodecList = std::vector<CodecName>;

@@ -75,7 +75,9 @@ void GSRenderer::Reset(bool hardware_reset)
 
 void GSRenderer::Destroy()
 {
-	GSCapture::EndCapture();
+	// GSclose ends replay capture; a renderer switch keeps its single output file open.
+	if (!GSCapture::IsRecordingReplay())
+		GSCapture::EndCapture();
 }
 
 void GSRenderer::UpdateRenderFixes()
@@ -1081,7 +1083,7 @@ void GSSetDisplayAlignment(GSDisplayAlignment alignment)
 	s_display_alignment = alignment;
 }
 
-bool GSRenderer::BeginCapture(std::string filename, const GSVector2i& size, bool force_audio_video)
+bool GSRenderer::BeginCapture(std::string filename, const GSVector2i& size, bool force_audio_video, bool recording_replay)
 {
 	const GSVector2i capture_resolution = (size.x != 0 && size.y != 0) ?
 											  size :
@@ -1091,7 +1093,7 @@ bool GSRenderer::BeginCapture(std::string filename, const GSVector2i& size, bool
 
 	return GSCapture::BeginCapture(GetTvRefreshRate(), capture_resolution,
 		GetCurrentAspectRatioFloat(GetVideoMode() == GSVideoMode::SDTV_480P),
-		std::move(filename), force_audio_video);
+		std::move(filename), force_audio_video, recording_replay);
 }
 
 bool GSRenderer::EndCapture()

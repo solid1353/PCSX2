@@ -4,11 +4,15 @@
 #include "Recording/InputRecording.h"
 #include "Recording/InputRecordingControls.h"
 #include "Recording/InputRecordingFile.h"
+#include "Recording/Utilities/InputRecordingLogger.h"
+#include "DebugTools/Debug.h"
+#include "Host.h"
 #include "Input/InputManager.h"
 #include "GS/Renderers/Common/GSRenderer.h"
 
 #include "common/Path.h"
 #include "common/FileSystem.h"
+#include "common/Console.h"
 
 #include <gtest/gtest.h>
 
@@ -233,6 +237,132 @@ TEST_F(InputRecordingResetTest, InitialBootResetDoesNotRestartTheRecording)
 	ASSERT_TRUE(CloseFile());
 	EXPECT_EQ(FileSystem::ReadBinaryFile(m_path.c_str()).value(), m_before);
 }
+
+// Exercise real logger/OSD delivery through its console sink without booting a VM.
+class InputRecordingNotificationTest : public InputRecordingFileTest, public testing::WithParamInterface<bool>
+{
+protected:
+	void SetUp() override
+	{
+		InputRecordingFileTest::SetUp();
+		ASSERT_FALSE(g_InputRecording.isActive());
+		m_osd_enabled = g_InputRecording.areOSDMessagesEnabled();
+		m_console_enabled = ConsoleLogging.recordingConsole.Enabled;
+		ConsoleLogging.recordingConsole.Enabled = true;
+		s_messages.clear();
+		Log::SetHostOutputLevel(LOGLEVEL_INFO, [](LOGLEVEL, ConsoleColors, std::string_view message) {
+			s_messages.emplace_back(message);
+		});
+		g_InputRecording.setOSDMessagesEnabled(GetParam());
+	}
+
+	void TearDown() override
+	{
+		g_InputRecording.m_file.close();
+		g_InputRecording.m_is_active = false;
+		g_InputRecording.m_controls = {};
+		g_InputRecording.m_recordingQueue = {};
+		g_InputRecording.setOSDMessagesEnabled(m_osd_enabled);
+		Host::ClearOSDMessages();
+		Log::SetHostOutputLevel(LOGLEVEL_NONE, nullptr);
+		ConsoleLogging.recordingConsole.Enabled = m_console_enabled;
+		InputRecordingFileTest::TearDown();
+	}
+
+	void StartPowerOn()
+	{
+		ASSERT_TRUE(g_InputRecording.m_file.openNew(m_path, false));
+		g_InputRecording.m_file.setEmulatorVersion();
+		ASSERT_TRUE(g_InputRecording.m_file.writeHeader());
+		g_InputRecording.m_type = InputRecording::Type::POWER_ON;
+		g_InputRecording.m_is_active = true;
+		g_InputRecording.m_initial_load_complete = true;
+		g_InputRecording.m_controls.setRecordModeEnabled(true);
+		g_InputRecording.m_controls.setRecordMode(false);
+	}
+
+	bool StartInputOnly(const std::string& path) { return g_InputRecording.createInputOnly(path); }
+	void Close() { g_InputRecording.closeActiveFile(); }
+	void CloseFileBeforeRestart() { g_InputRecording.m_file.close(); }
+
+	void ExpectMessage(const std::string& message, bool osd) const
+	{
+		EXPECT_NE(std::ranges::find(s_messages, "[REC]: " + message), s_messages.end()) << message;
+		EXPECT_EQ(std::ranges::find(s_messages, "OSD [input_rec_log]: " + message) != s_messages.end(), osd) << message;
+	}
+
+	inline static std::vector<std::string> s_messages;
+	bool m_osd_enabled = true;
+	bool m_console_enabled = false;
+};
+
+TEST_P(InputRecordingNotificationTest, RestartAndCloseKeepTheSessionNotificationPolicy)
+{
+	StartPowerOn();
+	ASSERT_FALSE(HasFatalFailure());
+	ExpectMessage("Record Mode Enabled", GetParam());
+	for (int restart = 0; restart < 2; restart++)
+	{
+		g_InputRecording.handleReset();
+		EXPECT_TRUE(g_InputRecording.isActive());
+		EXPECT_EQ(g_InputRecording.areOSDMessagesEnabled(), GetParam());
+	}
+	ExpectMessage("Input recording restarted from power-on.", GetParam());
+	// Mode changes can be deferred until after a frame, including after the file closes.
+	g_InputRecording.getControls().setReplayMode();
+	Close();
+	g_InputRecording.getControls().processControlQueue();
+	EXPECT_FALSE(g_InputRecording.isActive());
+	ExpectMessage("Input recording stopped", GetParam());
+	InputRec::log("Error after close", Host::OSD_ERROR_DURATION);
+	ExpectMessage("Error after close", GetParam());
+	if (!GetParam())
+		EXPECT_FALSE(std::ranges::any_of(s_messages, [](const std::string& message) { return message.starts_with("OSD [input_rec_log]:"); }));
+}
+
+TEST_P(InputRecordingNotificationTest, FailedReplayKeepsStartupErrorsAndReadOnlyModeMessagesInConsole)
+{
+	InputRecordingFile file;
+	ASSERT_TRUE(file.openNew(m_path, InputRecordingFile::StartType::None));
+	ASSERT_TRUE(file.writeHeader());
+	ASSERT_TRUE(file.close());
+	EXPECT_FALSE(g_InputRecording.play(m_path));
+	EXPECT_FALSE(g_InputRecording.isActive());
+	ExpectMessage("This input recording has no starting state and cannot be replayed.", GetParam());
+	g_InputRecording.getControls().toggleRecordMode();
+	ExpectMessage("Input recording playback is read-only", GetParam());
+}
+
+TEST_P(InputRecordingNotificationTest, RestartFailureKeepsErrorsQuietAfterClosingLaunchSession)
+{
+	StartPowerOn();
+	ASSERT_FALSE(HasFatalFailure());
+	CloseFileBeforeRestart();
+	g_InputRecording.handleReset();
+	EXPECT_FALSE(g_InputRecording.isActive());
+	ExpectMessage("Unable to stop input recording", GetParam());
+	ExpectMessage("Failed to restart input recording; recording stopped.", GetParam());
+}
+
+TEST_P(InputRecordingNotificationTest, HotkeyRecordingRestoresNotificationsAfterLaunchSession)
+{
+	ASSERT_TRUE(StartInputOnly(m_path));
+	EXPECT_TRUE(g_InputRecording.areOSDMessagesEnabled());
+	ExpectMessage("Recording input", true);
+	g_InputRecording.stop();
+	EXPECT_FALSE(g_InputRecording.isActive());
+	ExpectMessage("Saved input recording: recording.p2m2", true);
+}
+
+TEST_P(InputRecordingNotificationTest, FailedHotkeyStartRestoresErrorNotifications)
+{
+	ASSERT_TRUE(FileSystem::WriteStringToFile(m_path.c_str(), "not a directory"));
+	EXPECT_FALSE(StartInputOnly(Path::Combine(m_path, "take.p2m2")));
+	InputRec::log("Failed to start input recording.", Host::OSD_ERROR_DURATION);
+	ExpectMessage("Failed to start input recording.", true);
+}
+
+INSTANTIATE_TEST_SUITE_P(SessionOSD, InputRecordingNotificationTest, testing::Bool());
 
 TEST_F(InputRecordingResolutionTest, ReplayUsesInternalResolutionRegardlessOfDesktopCaptureSettings)
 {

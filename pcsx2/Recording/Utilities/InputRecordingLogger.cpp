@@ -3,6 +3,8 @@
 
 #include "InputRecordingLogger.h"
 
+#include "Recording/InputRecording.h"
+
 #include "DebugTools/Debug.h"
 #include "common/Console.h"
 #include "IconsPromptFont.h"
@@ -19,7 +21,8 @@ namespace InputRec
 		if (!log.empty())
 		{
 			recordingConLog(fmt::format("[REC]: {}\n", log));
-			Host::AddIconOSDMessage("input_rec_log", ICON_PF_ANALOG_LEFT_RIGHT, log, duration);
+			if (g_InputRecording.areOSDMessagesEnabled())
+				Host::AddIconOSDMessage("input_rec_log", ICON_PF_ANALOG_LEFT_RIGHT, log, duration);
 		}
 	}
 

@@ -302,6 +302,8 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 			Host::ReportErrorAsync(TRANSLATE_STR("QtHost", "Startup Error"), error.GetDescription());
 			return;
 		}
+		// Launch-started recording, replay, and capture sessions stay console-only for their whole life.
+		g_InputRecording.setOSDMessagesEnabled(false);
 		if (!input_recording.empty())
 		{
 			const bool started = create_input_recording ? g_InputRecording.create(input_recording, false, std::string()) :

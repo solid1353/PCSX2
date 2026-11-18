@@ -53,6 +53,8 @@ public:
 	u32 getFrameCounter() const;
 	u32 getFrameCounterStateless() const;
 	bool isActive() const;
+	bool areOSDMessagesEnabled() const { return m_osd_messages_enabled; }
+	void setOSDMessagesEnabled(bool enabled) { m_osd_messages_enabled = enabled; }
 	void stopReadOnlyReplayAtEndOnResume();
 	void processRecordQueue();
 	void prepareVideoFrame();
@@ -79,6 +81,7 @@ public:
 
 private:
 	friend class InputRecordingResetTest;
+	friend class InputRecordingNotificationTest;
 
 	InputRecordingControls m_controls;
 	InputRecordingFile m_file;
@@ -87,6 +90,8 @@ private:
 
 	bool m_initial_load_complete = false;
 	bool m_is_active = false;
+	// Keep the session's notification policy through close and power-on restarts, including errors after close.
+	bool m_osd_messages_enabled = true;
 	bool m_watching_for_rerecords = false;
 	bool m_capture_markers = false;
 	bool m_capture_marker_down = false;

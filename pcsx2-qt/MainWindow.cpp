@@ -2742,6 +2742,7 @@ void MainWindow::onInputRecNewActionTriggered()
 		Host::RunOnCPUThread(
 			[filePath = dlg.getFilePath(), fromSavestate = dlg.getInputRecType() == InputRecording::Type::FROM_SAVESTATE,
 				authorName = dlg.getAuthorName()]() {
+				g_InputRecording.setOSDMessagesEnabled(true);
 				if (g_InputRecording.create(filePath, fromSavestate, authorName))
 				{
 					QtHost::RunOnUIThread([]() {
@@ -2802,6 +2803,7 @@ void MainWindow::onInputRecPlayActionTriggered()
 			m_ui.actionInputRecStop->setEnabled(false);
 		}
 		Host::RunOnCPUThread([filename = QDir::toNativeSeparators(fileNames.first()).toStdString()]() {
+			g_InputRecording.setOSDMessagesEnabled(true);
 			if (g_InputRecording.play(filename))
 			{
 				QtHost::RunOnUIThread([]() {

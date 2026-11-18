@@ -4,6 +4,13 @@ The fork changes how input recordings are opened from the command line and
 adds marker and frame-exact video capture during replay. The implementation is in
 `pcsx2/Recording/` and the option parsing in `pcsx2-qt/QtHost.cpp`.
 
+Input recording notifications appear only for sessions started in-game with
+**Toggle Input Recording** or the Tools menu. Launch-started sessions,
+including `-input-recording-create`, `-input-recording`, capture scripts, and
+agent replay, keep input recording messages in the console log without OSD
+notifications for their whole life, including mode changes, errors, stopping,
+and power-on restarts. A later hotkey or menu session shows notifications again.
+
 ## Recording paths
 
 `-input-recording <path>` replays a recording and
@@ -242,6 +249,9 @@ it with the other state files.
   counters, shorter replacement runs, and unchanged playback/input-only resets.
   Recording creation also covers missing parents for every recording origin
   and directory-creation failures.
+  Notification tests cover console logging and OSD delivery for quiet and
+  interactive sessions through restarts, mode changes, close, and errors,
+  including restoring notifications for a later hotkey recording.
 - `tests/ctest/core/emu_folders_tests.cpp` covers process recording folder
   overrides across settings reloads, unchanged settings, relative path
   resolution, and lazy directory creation for configured and overridden paths.

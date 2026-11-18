@@ -294,6 +294,7 @@ void InputRecording::toggleInputRecording()
 
 bool InputRecording::createInputOnly(const std::string& filename)
 {
+	m_osd_messages_enabled = true;
 	// Start at the input poll's current frame, without resetting; hotkey boundary timing needs proper runtime testing.
 	if (!m_file.openNew(filename, InputRecordingFile::StartType::None))
 		return false;

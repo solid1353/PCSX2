@@ -178,6 +178,7 @@ namespace EmuFolders
 	static bool ShouldUsePortableMode();
 	static std::string GetPortableModePath();
 	static std::string s_savestates_override;
+	static std::string s_input_recordings_override;
 } // namespace EmuFolders
 
 TraceLogsEE::TraceLogsEE()
@@ -2422,6 +2423,11 @@ void EmuFolders::SetSavestatesOverride(std::string path)
 	s_savestates_override = std::move(path);
 }
 
+void EmuFolders::SetInputRecordingsOverride(std::string path)
+{
+	s_input_recordings_override = std::move(path);
+}
+
 void EmuFolders::LoadConfig(SettingsInterface& si)
 {
 	Bios = LoadPathFromSettings(si, DataRoot, "Bios", "bios");
@@ -2440,7 +2446,8 @@ void EmuFolders::LoadConfig(SettingsInterface& si)
 	Cache = LoadPathFromSettings(si, DataRoot, "Cache", "cache");
 	Textures = LoadPathFromSettings(si, DataRoot, "Textures", "textures");
 	InputProfiles = LoadPathFromSettings(si, DataRoot, "InputProfiles", "inputprofiles");
-	InputRecordings = LoadPathFromSettings(si, DataRoot, "InputRecordings", "inputrecordings");
+	InputRecordings = s_input_recordings_override.empty() ? LoadPathFromSettings(si, DataRoot, "InputRecordings", "inputrecordings") :
+	                                                        s_input_recordings_override;
 	AdditionalContentFolders.clear();
 	for (std::string path : si.GetStringList("Folders", "AdditionalContentFolders"))
 	{
@@ -2503,7 +2510,6 @@ bool EmuFolders::EnsureFoldersExist()
 	result = FileSystem::CreateDirectoryPath(Cache.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(Textures.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(InputProfiles.c_str(), false) && result;
-	result = FileSystem::CreateDirectoryPath(InputRecordings.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(Videos.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(DebuggerLayouts.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(DebuggerSettings.c_str(), false) && result;

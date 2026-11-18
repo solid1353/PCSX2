@@ -10,7 +10,22 @@ adds marker and frame-exact video capture during replay. The implementation is i
 `-input-recording-create <path>` starts a new power-on recording. An absolute
 path is used exactly. A relative path is resolved below the primary
 `InputRecordings` folder and must not contain `..`; additional content folders
-are not searched. PCSX2 does not create missing parent directories.
+are not searched.
+
+`-input-recording-folder <path>` overrides the primary `InputRecordings`
+folder for this process without changing settings. A relative folder path
+resolves from the working directory of the command that launched PCSX2.
+The override applies to hotkey saves, the Tools → Input Recording file
+dialogs, and relative recording launch paths, regardless of option order.
+Without the option, the configured folder is used.
+The menu's New dialog proposes `recording.p2m2` there (with a numbered suffix
+if needed), so it can save into a missing folder without browsing first.
+
+Startup and replay do not create the recordings folder, with or without
+the override. Missing parent directories are created only when a recording
+file is about to be written, through the hotkey, the menu, or
+`-input-recording-create`. Absolute recording filenames still select their
+exact destination, whose missing parents are created at that point too.
 
 A recording that starts from a savestate keeps that savestate in the
 directory `<recording>_SaveState` next to the recording.
@@ -34,7 +49,8 @@ overlay setting is off.
 
 Press it again to close the file. The saved-file message names
 `<game> - YYYY-MM-DD HH.MM.SS.p2m2` in the configured primary
-`InputRecordings` folder. If that name already exists, a numbered suffix
+`InputRecordings` folder, or the process folder selected with
+`-input-recording-folder <path>`. If that name already exists, a numbered suffix
 is added. Both pad ports are sampled once per input frame; resets and
 state loads do not rewind this log. Other recording or replay sessions
 must be stopped before starting one, and capture scripts cannot accompany it.
@@ -224,6 +240,11 @@ it with the other state files.
   rejection of input-only replay, invalid origin markers, and truncated samples.
   They also cover power-on recording restarts, removal of old samples and
   counters, shorter replacement runs, and unchanged playback/input-only resets.
+  Recording creation also covers missing parents for every recording origin
+  and directory-creation failures.
+- `tests/ctest/core/emu_folders_tests.cpp` covers process recording folder
+  overrides across settings reloads, unchanged settings, relative path
+  resolution, and lazy directory creation for configured and overridden paths.
 - `tests/ctest/core/capture_script_tests.cpp` covers raw stick values, axis
   order, validation, persistence, and frame boundaries independently of buttons.
 - `tests/ctest/core/patch_tests.cpp` (`InputRecordingPath` tests) covers exact

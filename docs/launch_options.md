@@ -30,6 +30,7 @@ capture. See [scripted takes](capture_script.md).
 | `-read-only-settings` | Prevents every settings INI write. |
 | `-pine-port <port>` | Uses PINE slot `1024` through `65535` when PINE is enabled. |
 | `-savestate-folder <path>` | Saves and loads every savestate in this folder instead of the Savestates folder, creating it if missing: slots, hotkeys, PINE, and input recording capture savestates. |
+| `-input-recording-folder <path>` | Uses this InputRecordings folder for the process: hotkey saves, menu dialogs, and relative `-input-recording`/`-input-recording-create` paths. Relative folder paths resolve from the launch working directory. Missing folders and parents are created only when writing a recording. |
 | `-centered-window` | Sizes the game window to the presented image without borders, with its frame 768 pixels tall independent of display scaling, centers it on its screen, and suppresses starting fullscreen. The window follows later aspect-ratio changes. |
 | `-no-recenter` | Turns off the **Recenter Window On Aspect Change** setting for the run, so the window keeps the position it is given. `-centered-window` still applies. |
 

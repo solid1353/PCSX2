@@ -8,6 +8,8 @@
 #include "Utilities/InputRecordingLogger.h"
 
 #include "common/FileSystem.h"
+#include "common/Error.h"
+#include "common/Path.h"
 
 #include <fmt/format.h>
 
@@ -109,6 +111,14 @@ bool InputRecordingFile::openNew(const std::string& path, bool fromSavestate)
 
 bool InputRecordingFile::openNew(const std::string& path, StartType start_type)
 {
+	const std::string directory(Path::GetDirectory(path));
+	Error error;
+	if (!directory.empty() && !FileSystem::CreateDirectoryPath(directory.c_str(), true, &error))
+	{
+		InputRec::consoleLog(fmt::format("Input recording directory creation failed: {}", error.GetDescription()));
+		return false;
+	}
+
 	if ((m_recordingFile = FileSystem::OpenCFile(path.data(), "wb+")) == nullptr)
 	{
 		InputRec::consoleLog(fmt::format("Input recording file opening failed. Error - {}", strerror(errno)));

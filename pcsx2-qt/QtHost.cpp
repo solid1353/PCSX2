@@ -2347,6 +2347,7 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -memory-card <path|none>: Uses an existing card file as a file card or folder card as a folder card in port 1, or disconnects all slots with none for this process.\n");
 	std::fprintf(stderr, "                            Does not change persistent settings; none is case-insensitive.\n");
 	std::fprintf(stderr, "  -savestate-folder <path>: Saves and loads every savestate in this folder, created if missing, for this process.\n");
+	std::fprintf(stderr, "  -input-recording-folder <path>: Uses this InputRecordings folder for this process; creates it only when writing a recording.\n");
 	std::fprintf(stderr, "  -pnach <path>: Uses supplied PNACH files in order instead of automatic CRC-PNACH loading. May be repeated.\n");
 	std::fprintf(stderr, "  -pnach-line <line>: Appends an executable PNACH line after file-based PNACHs. May be repeated.\n");
 	std::fprintf(stderr, "  -portable: Force enable portable mode to store data in local PCSX2 path instead of the default configuration path. Overrides '-datapath'.\n");
@@ -2569,6 +2570,18 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				}
 
 				EmuFolders::SetSavestatesOverride(path);
+				continue;
+			}
+			else if (CHECK_ARG_PARAM(QStringLiteral("-input-recording-folder")))
+			{
+				const QString path = *(++it);
+				if (path.isEmpty())
+				{
+					std::fprintf(stderr, "Input recording folder must not be empty.\n");
+					return false;
+				}
+				EmuFolders::SetInputRecordingsOverride(
+					QDir::toNativeSeparators(QFileInfo(path).absoluteFilePath()).toStdString());
 				continue;
 			}
 			else if (CHECK_ARG_PARAM(QStringLiteral("-pine-port")))

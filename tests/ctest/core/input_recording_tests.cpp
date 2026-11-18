@@ -298,6 +298,31 @@ TEST_F(InputRecordingFileTest, AllowsConcurrentReadOnlyPlayback)
 	EXPECT_FALSE(first_playback.writePadData(0, pad_data));
 }
 
+TEST_F(InputRecordingFileTest, EveryRecordingOriginCreatesMissingParentDirectories)
+{
+	for (const auto type : {InputRecordingFile::StartType::PowerOn, InputRecordingFile::StartType::SaveState,
+			 InputRecordingFile::StartType::None})
+	{
+		const auto directory = m_directory / std::to_string(static_cast<u8>(type)) / "nested";
+		const std::string filename = (directory / "take.p2m2").string();
+		EXPECT_FALSE(std::filesystem::exists(directory));
+		InputRecordingFile recording;
+		ASSERT_TRUE(recording.openNew(filename, type));
+		ASSERT_TRUE(recording.writeHeader());
+		ASSERT_TRUE(recording.close());
+		EXPECT_TRUE(std::filesystem::is_regular_file(filename));
+	}
+}
+
+TEST_F(InputRecordingFileTest, DirectoryCreationFailureDoesNotOpenARecording)
+{
+	ASSERT_TRUE(FileSystem::WriteStringToFile(m_path.c_str(), "not a directory"));
+	InputRecordingFile recording;
+	EXPECT_FALSE(recording.openNew(Path::Combine(m_path, "take.p2m2"), false));
+	EXPECT_TRUE(recording.getFilename().empty());
+	EXPECT_EQ(FileSystem::ReadFileToString(m_path.c_str()).value(), "not a directory");
+}
+
 TEST(InputRecordingControls, PreventsRecordModeForReadOnlyPlayback)
 {
 	InputRecordingControls controls;

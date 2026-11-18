@@ -4,6 +4,7 @@
 #include "InputRecordingViewer.h"
 
 #include "QtUtils.h"
+#include "pcsx2/Config.h"
 #include <QtCore/QDir>
 #include <QtCore/QString>
 #include <QtWidgets/QDialog>
@@ -81,6 +82,7 @@ void InputRecordingViewer::loadTable()
 void InputRecordingViewer::openFile()
 {
 	QFileDialog dialog(this);
+	dialog.setDirectory(QString::fromStdString(EmuFolders::InputRecordings));
 	dialog.setFileMode(QFileDialog::ExistingFile);
 	dialog.setWindowTitle(tr("Select a File"));
 	dialog.setNameFilter(tr("Input Recording Files (*.p2m2)"));

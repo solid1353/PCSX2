@@ -49,24 +49,16 @@
 	} while (0)
 #include "common/RedtapeWindows.h"
 #include <WinSock2.h>
-#elif defined(__linux__) || defined(__FreeBSD__)
-#define read_portable(a, b, c) (read(a, b, c))
-#define write_portable(a, b, c) (send(a, b, c, MSG_NOSIGNAL))
-#define safe_close_portable(a) \
-	do \
-	{ \
-		if ((a) >= 0) \
-		{ \
-			close((a)); \
-			(a) = -1; \
-		} \
-	} while (0)
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
 #else
-#define read_portable(a, b, c) (read(a, b, c))
-#define write_portable(a, b, c) (write(a, b, c))
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#define read_portable(a, b, c) (recv(a, b, c, 0))
+#ifdef MSG_NOSIGNAL
+#define write_portable(a, b, c) (send(a, b, c, MSG_NOSIGNAL))
+#else
+#define write_portable(a, b, c) (send(a, b, c, 0))
+#endif
 #define safe_close_portable(a) \
 	do \
 	{ \
@@ -76,12 +68,7 @@
 			(a) = -1; \
 		} \
 	} while (0)
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
 #endif
-
-#define PINE_EMULATOR_NAME "pcsx2"
 
 #ifdef _WIN32
 
@@ -1151,14 +1138,10 @@ namespace PINEServer
 	static int s_slot;
 
 #ifdef _WIN32
-	// windows claim to have support for AF_UNIX sockets but that is a blatant lie,
-	// their SDK won't even run their own examples, so we go on TCP sockets.
 	static SOCKET s_sock = INVALID_SOCKET;
 	// the message socket used in thread's accept().
 	static SOCKET s_msgsock = INVALID_SOCKET;
 #else
-	// absolute path of the socket. Stored in XDG_RUNTIME_DIR, if unset /tmp
-	static std::string s_socket_name;
 	static int s_sock = -1;
 	// the message socket used in thread's accept().
 	static int s_msgsock = -1;
@@ -1337,6 +1320,12 @@ namespace PINEServer
 
 bool PINEServer::Initialize(int slot)
 {
+	if (slot <= 0 || slot > 65535)
+	{
+		Console.Error("PINE: Invalid TCP port %d.", slot);
+		return false;
+	}
+
 	s_end.store(false, std::memory_order_release);
 	s_slot = slot;
 
@@ -1348,8 +1337,14 @@ bool PINEServer::Initialize(int slot)
 		return false;
 	}
 
+#endif
+
 	s_sock = socket(AF_INET, SOCK_STREAM, 0);
-	if ((s_sock == INVALID_SOCKET) || slot > 65536)
+#ifdef _WIN32
+	if (s_sock == INVALID_SOCKET)
+#else
+	if (s_sock < 0)
+#endif
 	{
 		Console.WriteLn(Color_Red, "PINE: Cannot open socket! Shutting down...");
 		Deinitialize();
@@ -1359,57 +1354,19 @@ bool PINEServer::Initialize(int slot)
 	sockaddr_in server = {};
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // localhost only
-	server.sin_port = htons(slot);
+	server.sin_port = htons(static_cast<u16>(slot));
 
-	if (bind(s_sock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
+#ifndef _WIN32
+	// Allow restarting the server while its old client connections are in TIME_WAIT.
+	const int reuse_address = 1;
+	setsockopt(s_sock, SOL_SOCKET, SO_REUSEADDR, &reuse_address, sizeof(reuse_address));
+#endif
+	if (bind(s_sock, reinterpret_cast<const sockaddr*>(&server), sizeof(server)) != 0)
 	{
 		Console.WriteLn(Color_Red, "PINE: Error while binding to socket! Shutting down...");
 		Deinitialize();
 		return false;
 	}
-
-#else
-	char* runtime_dir = nullptr;
-#ifdef __APPLE__
-	runtime_dir = std::getenv("TMPDIR");
-#else
-	runtime_dir = std::getenv("XDG_RUNTIME_DIR");
-#endif
-	// fallback in case macOS or other OSes don't implement the XDG base
-	// spec
-	if (runtime_dir == nullptr)
-		s_socket_name = "/tmp/" PINE_EMULATOR_NAME ".sock";
-	else
-	{
-		s_socket_name = runtime_dir;
-		s_socket_name += "/" PINE_EMULATOR_NAME ".sock";
-	}
-
-	if (slot != PINE_DEFAULT_SLOT)
-		s_socket_name += "." + std::to_string(slot);
-
-	struct sockaddr_un server;
-
-	s_sock = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (s_sock < 0)
-	{
-		Console.WriteLn(Color_Red, "PINE: Cannot open socket! Shutting down...");
-		Deinitialize();
-		return false;
-	}
-	server.sun_family = AF_UNIX;
-	StringUtil::Strlcpy(server.sun_path, s_socket_name, sizeof(server.sun_path));
-
-	// we unlink the socket so that when releasing this thread the socket gets
-	// freed even if we didn't close correctly the loop
-	unlink(s_socket_name.c_str());
-	if (bind(s_sock, (struct sockaddr*)&server, sizeof(struct sockaddr_un)))
-	{
-		Console.WriteLn(Color_Red, "PINE: Error while binding to socket! Shutting down...");
-		Deinitialize();
-		return false;
-	}
-#endif
 
 	// maximum queue of 4096 commands before refusing, approximated to the
 	// nearest legal value. We do not use SOMAXCONN as windows have this idea
@@ -1459,7 +1416,11 @@ std::vector<u8>& PINEServer::MakeFailIPC(std::vector<u8>& ret_buffer, uint32_t s
 bool PINEServer::AcceptClient()
 {
 	s_msgsock = accept(s_sock, 0, 0);
+#ifdef _WIN32
+	if (s_msgsock == INVALID_SOCKET)
+#else
 	if (s_msgsock < 0)
+#endif
 	{
 		// everything else is non recoverable in our scope
 		// we also mark as recoverable socket errors where it would block a
@@ -1477,7 +1438,7 @@ bool PINEServer::AcceptClient()
 		return false;
 	}
 
-#ifdef __APPLE__
+#ifdef SO_NOSIGPIPE
 	int nosigpipe = 1;
 	setsockopt(s_msgsock, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
 #endif
@@ -1561,21 +1522,17 @@ void PINEServer::Deinitialize()
 {
 	s_end.store(true, std::memory_order_release);
 
-#ifndef _WIN32
-	if (!s_socket_name.empty())
-	{
-		unlink(s_socket_name.c_str());
-		s_socket_name = {};
-	}
-#endif
-
-	// shutdown() is needed, otherwise accept() will still block.
+	// Wake the server if it is waiting in accept() or recv().
 #ifdef _WIN32
 	if (s_sock != INVALID_SOCKET)
 		shutdown(s_sock, SD_BOTH);
+	if (s_msgsock != INVALID_SOCKET)
+		shutdown(s_msgsock, SD_BOTH);
 #else
 	if (s_sock >= 0)
 		shutdown(s_sock, SHUT_RDWR);
+	if (s_msgsock >= 0)
+		shutdown(s_msgsock, SHUT_RDWR);
 #endif
 
 	safe_close_portable(s_sock);

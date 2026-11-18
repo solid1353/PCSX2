@@ -6,11 +6,10 @@ Opcodes `0x00` through `0x0F` keep their upstream meaning. The server is in
 
 ## Transport and framing
 
-On Windows, PINE listens on TCP `127.0.0.1` at the configured slot. Other
-platforms use a Unix socket named `pcsx2.sock` (with `.<slot>` appended when
-the slot is not the default `28011`) in `XDG_RUNTIME_DIR`, `TMPDIR` on macOS,
-or `/tmp`. The [`-pine-port`](launch_options.md#process-overrides) launch
-option changes the slot for one process.
+PINE listens on TCP `127.0.0.1` at the configured slot on all platforms.
+The default port is `28011`. The
+[`-pine-port`](launch_options.md#process-overrides) launch option changes it
+for one process.
 
 All integers are little-endian. A request is `u32 total_size` (including the
 size field) followed by one or more commands, each an opcode byte and its

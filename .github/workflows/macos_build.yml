@@ -33,6 +33,10 @@ on:
         required: false
         type: boolean
         default: false
+      package_arm64:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build_macos:
@@ -216,3 +220,18 @@ jobs:
         with:
           name: ${{ steps.artifact-metadata.outputs.artifact-name }}
           path: "*.tar.xz"
+
+      - name: Package Apple Silicon app
+        if: inputs.arch == 'arm64' && inputs.package_arm64
+        run: |
+          test "$(lipo -archs PCSX2.app/Contents/MacOS/PCSX2)" = arm64
+          ditto -c -k --keepParent PCSX2.app PCSX2-macos-arm64.zip
+
+      - name: Upload Apple Silicon ZIP
+        if: inputs.arch == 'arm64' && inputs.package_arm64
+        uses: actions/upload-artifact@v7
+        with:
+          name: PCSX2-macos-arm64
+          path: PCSX2-macos-arm64.zip
+          if-no-files-found: error
+          compression-level: 0

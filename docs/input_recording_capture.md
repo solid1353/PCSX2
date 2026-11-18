@@ -51,14 +51,17 @@ up to a multiple of eight, as it does for PINE (for example, 2560 x 2240 stays
 changes scale into that starting size without restarting capture. Window size
 and surfaceless mode do not choose the output size.
 
-Capture uses single-threaded lossless FFV1 in RGB and stereo PCM float audio
-at the emulated console's sample rate. It ignores the desktop capture codec,
-resolution, bitrate, and encoder-parameter settings.
-Codec and container bitexact flags exclude wall-clock muxing metadata. The
-recording's existing fixed RTC applies; it advances with emulated VSyncs.
+Capture encodes with the configured video and audio capture settings, as PINE
+`StartVideoCapture` does: codec, bitrate, pixel format, encoder parameters and
+hardware encoding. Only the output size comes from the internal resolution
+above, never the configured capture resolution. Each frame's SPU2 samples are
+encoded in the audio codec's frame size; the last incomplete audio frame is
+written when the codec accepts a short final frame.
+The recording's existing fixed RTC applies; it advances with emulated VSyncs.
 Use the same emulator build, rendering settings, BIOS, ISO, PNACHs, and initial
-card contents for repeated takes. Persistent card writes can change the next
-run's initial state; discarded or volatile writes preserve the source card.
+card contents for repeated takes, so they show the same frames. Persistent card
+writes can change the next run's initial state; discarded or volatile writes
+preserve the source card.
 
 `-surfaceless`, `-mute`, speed options (including Unlimited), launch PNACHs,
 and all memory card modes work with video capture. Audio is collected directly
@@ -75,12 +78,12 @@ Capture failures log an error, shut down, and exit with a nonzero process status
 including startup failures and interrupted captures. Successful batch capture
 exits with status zero. Capture playback starts running even if **Start Paused**
 is enabled, and does not require the recording tools setting. Capture requires
-the FFmpeg runtime with FFV1 and PCM float encoders. It cannot accompany
+the FFmpeg runtime with the configured encoders. It cannot accompany
 `-agent-replay`.
 Marker capture may accompany video, but savestate creation can affect a game's
 rendering; use video alone for takes that must avoid those side effects.
-Repeated decoded video/audio equality, capture timing, resolution changes, and
-renderer switches still need proper runtime testing; unit tests cover parsing,
+Capture timing, resolution changes, and renderer switches still need proper
+runtime testing; unit tests cover parsing,
 validation, and resolution selection, not encoder or emulator output.
 
 ## Marker capture

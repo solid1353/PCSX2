@@ -54,8 +54,8 @@ wait [[[0x00607620]+0x34]] != 0 && [[[0x00607620]+0x34]] != 1 && [[[0x00607620]+
 
 ## Capture and completion
 
-Capture uses the same internal render resolution, FFV1 RGB, SPU2 PCM audio,
-and bitexact encoder/muxer path as
+Capture uses the same internal render resolution, configured capture
+encoders and per-frame SPU2 audio as
 [`-input-recording-video`](input_recording_capture.md#frame-exact-video).
 Audio is sampled before host mute, volume, buffering, and time stretching.
 Input changes, conditions, audio, and capture boundaries depend on emulated

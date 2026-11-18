@@ -2365,7 +2365,7 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -input-recording-capture-directory <path>: Sets the root directory for replay marker captures.\n");
 	std::fprintf(stderr, "  -input-recording-capture-mode <full|screenshots|savestates>: Enables L3+R3 marker capture with both outputs, screenshots only, or savestates only.\n");
 	std::fprintf(stderr, "  -input-recording-capture-markers <spec>: Captures only the specified 1-based marker numbers and ranges (for example, 1,3-5).\n");
-	std::fprintf(stderr, "  -input-recording-video <path.mkv>: Writes lossless video and audio during power-on replay.\n");
+	std::fprintf(stderr, "  -input-recording-video <path.mkv>: Writes video and audio with the configured capture settings during power-on replay.\n");
 	std::fprintf(stderr, "  -input-recording-video-frames <first>-<last>: Selects an inclusive range of recording frame counters (0..total), then shuts down.\n");
 	std::fprintf(stderr, "  -capture-script <script>: Runs semicolon-separated wait/run/hold/capture/stop statements from power-on.\n");
 	std::fprintf(stderr, "  -input-recording-create <path>: Creates at an exact absolute path or a path relative to the primary InputRecordings folder.\n");

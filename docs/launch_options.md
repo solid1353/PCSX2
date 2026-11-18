@@ -10,14 +10,15 @@ Input recording options are described in
 
 `-input-recording-video <path.mkv> -input-recording-video-frames <first>-<last>`
 captures an inclusive range of the power-on recording's frame counter
-(`0..total`) with lossless video and emulated audio, then shuts down the VM.
+(`0..total`) with the configured capture encoders and emulated audio, then
+shuts down the VM.
 Both options, `-input-recording <recording>`, and a boot filename or `-bios`
 are required. Capture failures exit nonzero; successful batch capture exits zero. See
 [frame-exact video](input_recording_capture.md#frame-exact-video) for output,
 completion, and determinism details.
 
 `-capture-script "<statements>"` with a boot ISO runs a frame-exact scripted
-take from power-on, with memory conditions, pad 0 input and the same lossless
+take from power-on, with memory conditions, pad 0 input and the same
 capture. See [scripted takes](capture_script.md).
 
 ## Process overrides

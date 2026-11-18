@@ -962,6 +962,8 @@ set(pcsx2RDebugHeaders
 set(rec_src "Recording")
 set(rec_vp_src "${rec_src}/VirtualPad")
 set(pcsx2RecordingSources
+	${rec_src}/CaptureScript.cpp
+	${rec_src}/CaptureScriptRuntime.cpp
 	${rec_src}/InputRecording.cpp
 	${rec_src}/InputRecordingControls.cpp
 	${rec_src}/InputRecordingFile.cpp
@@ -971,6 +973,7 @@ set(pcsx2RecordingSources
 
 # Recording headers
 set(pcsx2RecordingHeaders
+	${rec_src}/CaptureScript.h
 	${rec_src}/InputRecording.h
 	${rec_src}/InputRecordingControls.h
 	${rec_src}/InputRecordingFile.h

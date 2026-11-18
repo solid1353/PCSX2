@@ -33,6 +33,7 @@
 #include "pcsx2/PerformanceMetrics.h"
 #include "pcsx2/Patch.h"
 #include "pcsx2/Recording/InputRecording.h"
+#include "pcsx2/Recording/CaptureScript.h"
 #include "pcsx2/SIO/Sio.h"
 #include "pcsx2/SPU2/spu2.h"
 #include "pcsx2/VMManager.h"
@@ -99,6 +100,7 @@ static bool s_nogui_mode = false;
 static bool s_surfaceless_mode = false;
 static bool s_agent_replay_mode = false;
 static bool s_input_recording_video_requested = false;
+static bool s_capture_script_requested = false;
 static bool s_pine_port_overridden = false;
 static bool s_start_big_picture_mode = false;
 static bool s_start_fullscreen = false;
@@ -290,9 +292,9 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 							 input_recording_video_frames](VMBootResult result, const Error& error) {
 		if (result != VMBootResult::StartupSuccess)
 		{
-			if (!input_recording_video.empty())
+			if (!input_recording_video.empty() || s_capture_script_requested)
 			{
-				Console.Error("Input recording video capture failed to boot: %s", error.GetDescription().c_str());
+				Console.Error("Recording capture failed to boot: %s", error.GetDescription().c_str());
 				g_emu_thread->getEventLoop()->quit();
 				Host::RequestExitApplication(false);
 				return;
@@ -325,7 +327,17 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 			}
 		}
 
-		if (!input_recording_video.empty() || (!s_agent_replay_mode && !Host::GetBoolSettingValue("UI", "StartPaused", false)))
+		if (s_capture_script_requested)
+		{
+			CaptureScript::Runtime::Start(s_batch_mode);
+			if (VMManager::GetState() == VMState::Stopping)
+			{
+				g_emu_thread->getEventLoop()->quit();
+				return;
+			}
+		}
+
+		if (s_capture_script_requested || !input_recording_video.empty() || (!s_agent_replay_mode && !Host::GetBoolSettingValue("UI", "StartPaused", false)))
 		{
 			// This will come back and call OnVMResumed().
 			VMManager::SetState(VMState::Running);
@@ -2355,6 +2367,7 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -input-recording-capture-markers <spec>: Captures only the specified 1-based marker numbers and ranges (for example, 1,3-5).\n");
 	std::fprintf(stderr, "  -input-recording-video <path.mkv>: Writes lossless video and audio during power-on replay.\n");
 	std::fprintf(stderr, "  -input-recording-video-frames <first>-<last>: Selects an inclusive range of recording frame counters (0..total), then shuts down.\n");
+	std::fprintf(stderr, "  -capture-script <script>: Runs semicolon-separated wait/run/hold/capture/stop statements from power-on.\n");
 	std::fprintf(stderr, "  -input-recording-create <path>: Creates at an exact absolute path or a path relative to the primary InputRecordings folder.\n");
 	std::fprintf(stderr, "  -fullscreen: Enters fullscreen mode immediately after starting.\n");
 	std::fprintf(stderr, "  -nofullscreen: Prevents fullscreen mode from triggering if enabled.\n");
@@ -2648,6 +2661,22 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				AutoBoot(autoboot)->input_recording_video = path;
 				continue;
 			}
+			else if (CHECK_ARG(QStringLiteral("-capture-script")))
+			{
+				if (std::next(it) == args.end())
+				{
+					std::fprintf(stderr, "Capture script requires a script argument.\n");
+					return false;
+				}
+				std::string error;
+				if (s_capture_script_requested || !CaptureScript::Runtime::Configure((++it)->toStdString(), &error))
+				{
+					std::fprintf(stderr, "Capture script parse error: %s\n", s_capture_script_requested ? "option specified twice" : error.c_str());
+					return false;
+				}
+				s_capture_script_requested = true;
+				continue;
+			}
 			else if (CHECK_ARG_PARAM(QStringLiteral("-input-recording-video-frames")))
 			{
 				const auto frames = ParseInputRecordingVideoFrames((++it)->toStdString());
@@ -2886,6 +2915,13 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 			return false;
 		}
 		s_input_recording_video_requested = true;
+	}
+	if (s_capture_script_requested && (!autoboot || !VMManager::IsDiscFileName(autoboot->filename) ||
+										  !autoboot->elf_override.empty() || !autoboot->save_state.empty() || autoboot->state_index.has_value() ||
+										  (autoboot->source_type && autoboot->source_type != CDVD_SourceType::Iso) || !autoboot->input_recording.empty() || s_agent_replay_mode))
+	{
+		std::fprintf(stderr, "Capture script requires a boot ISO, without savestate loading or input recording options.\n");
+		return false;
 	}
 	if (FileMcd_IsVolatileMode() && explicit_discard_memory_card_writes)
 	{
@@ -3161,6 +3197,11 @@ shutdown_and_exit:
 	if (s_input_recording_video_requested && !g_InputRecording.didVideoCaptureComplete())
 	{
 		Console.Error("Input recording video capture did not complete successfully.");
+		return EXIT_FAILURE;
+	}
+	if (s_capture_script_requested && !CaptureScript::Runtime::DidComplete())
+	{
+		Console.Error("Capture script did not complete successfully.");
 		return EXIT_FAILURE;
 	}
 	return result;

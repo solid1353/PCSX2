@@ -1124,6 +1124,12 @@
     <ClCompile Include="Recording\InputRecording.cpp">
       <Filter>Tools\Input Recording</Filter>
     </ClCompile>
+    <ClCompile Include="Recording\CaptureScript.cpp">
+      <Filter>Tools\Input Recording</Filter>
+    </ClCompile>
+    <ClCompile Include="Recording\CaptureScriptRuntime.cpp">
+      <Filter>Tools\Input Recording</Filter>
+    </ClCompile>
     <ClCompile Include="Recording\InputRecordingControls.cpp">
       <Filter>Tools\Input Recording</Filter>
     </ClCompile>
@@ -2083,6 +2089,9 @@
       <Filter>System\Ps2\GS\Renderers\Direct3D12</Filter>
     </ClInclude>
     <ClInclude Include="Recording\InputRecording.h">
+      <Filter>Tools\Input Recording</Filter>
+    </ClInclude>
+    <ClInclude Include="Recording\CaptureScript.h">
       <Filter>Tools\Input Recording</Filter>
     </ClInclude>
     <ClInclude Include="Recording\InputRecordingControls.h">

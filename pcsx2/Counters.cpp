@@ -18,6 +18,7 @@
 #include "SIO/Sio.h"
 #include "SPU2/spu2.h"
 #include "Recording/InputRecording.h"
+#include "Recording/CaptureScript.h"
 #include "VMManager.h"
 #include "VUmicro.h"
 
@@ -496,9 +497,11 @@ static __fi void VSyncStart(u64 sCycle)
 
 	// Put capture commands on the same GS queue as this completed recording frame.
 	g_InputRecording.prepareVideoFrame();
+	CaptureScript::Runtime::PrepareVideoFrame();
 	gsPostVsyncStart(); // MUST be after framelimit; doing so before causes funk with frame times!
 
 	g_InputRecording.finishVideoFrame();
+	CaptureScript::Runtime::EndFrame();
 
 	// Poll input after MTGS frame push, just in case it has to stall to catch up.
 	VMManager::Internal::PollInputOnCPUThread();

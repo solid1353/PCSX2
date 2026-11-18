@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "Achievements.h"
+#include "Recording/CaptureScript.h"
 #include "BuildVersion.h"
 #include "CDVD/CDVD.h"
 #include "CDVD/IsoReader.h"
@@ -1898,6 +1899,7 @@ void VMManager::Shutdown(bool save_resume_state)
 	CancelSaveStateGSDumps();
 
 	// end input recording before clearing state
+	CaptureScript::Runtime::Shutdown();
 	if (g_InputRecording.isActive())
 		g_InputRecording.stop();
 
@@ -3463,6 +3465,7 @@ void VMManager::Internal::PollInputOnCPUThread()
 
 	PINEServer::ReplayAnalysis::OnInputFrameProcessed();
 	PINEServer::AgentControl::OnInputFrameProcessed();
+	CaptureScript::Runtime::ApplyInput();
 }
 
 void VMManager::CheckForCPUConfigChanges(const Pcsx2Config& old_config)

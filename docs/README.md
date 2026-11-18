@@ -95,6 +95,8 @@ dump fails, and no message of its own when it succeeds (`pcsx2/VMManager.cpp`).
   speed, settings, memory cards, PINE, and agent replay.
 - [Input recording capture](input_recording_capture.md): recording paths,
   read-only and concurrent playback, and L3+R3 marker capture.
+- [Scripted takes](capture_script.md): frame-exact launch scripts with memory
+  conditions, scripted pads, and lossless video/audio capture.
 - [Content folders and aliases](content_folders.md): additional content
   folders, game settings lookup, content alias bundles, and canonical local
   identity.

@@ -16,6 +16,10 @@ are required. Capture failures exit nonzero; successful batch capture exits zero
 [frame-exact video](input_recording_capture.md#frame-exact-video) for output,
 completion, and determinism details.
 
+`-capture-script "<statements>"` with a boot ISO runs a frame-exact scripted
+take from power-on, with memory conditions, pad 0 input and the same lossless
+capture. See [scripted takes](capture_script.md).
+
 ## Process overrides
 
 | Option | Effect |

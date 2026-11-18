@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "Host.h"
+#include "Recording/CaptureScript.h"
 #include "Input/InputManager.h"
 #include "SIO/Pad/Pad.h"
 #include "SIO/Pad/PadDualshock2.h"
@@ -531,6 +532,9 @@ PadBase* Pad::GetPad(const u8 unifiedSlot)
 
 void Pad::SetControllerState(u32 controller, u32 bind, float value)
 {
+	if (CaptureScript::Runtime::IsActive())
+		return;
+
 	if (controller >= NUM_CONTROLLER_PORTS)
 		return;
 
@@ -715,6 +719,9 @@ void Pad::SetMacroButtonState(InputBindingKey& key, u32 pad, u32 index, bool sta
 
 void Pad::ApplyMacroButton(u32 controller, const Pad::MacroButton& mb)
 {
+	if (CaptureScript::Runtime::IsActive())
+		return;
+
 	const float value = mb.toggle_state ? mb.pressure : 0.0f;
 	PadBase* const pad = Pad::GetPad(controller);
 

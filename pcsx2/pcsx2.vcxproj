@@ -289,6 +289,8 @@
     <ClCompile Include="FW.cpp" />
     <ClCompile Include="PerformanceMetrics.cpp" />
     <ClCompile Include="Recording\InputRecording.cpp" />
+    <ClCompile Include="Recording\CaptureScript.cpp" />
+    <ClCompile Include="Recording\CaptureScriptRuntime.cpp" />
     <ClCompile Include="Recording\InputRecordingControls.cpp" />
     <ClCompile Include="Recording\InputRecordingFile.cpp" />
     <ClCompile Include="Recording\PadData.cpp" />
@@ -739,6 +741,7 @@
     <ClInclude Include="FW.h" />
     <ClInclude Include="PerformanceMetrics.h" />
     <ClInclude Include="Recording\InputRecording.h" />
+    <ClInclude Include="Recording\CaptureScript.h" />
     <ClInclude Include="Recording\InputRecordingControls.h" />
     <ClInclude Include="Recording\InputRecordingFile.h" />
     <ClInclude Include="Recording\InputRecordingTypes.h" />

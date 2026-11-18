@@ -1107,6 +1107,11 @@ void Host::OnVMStarted()
 	emit g_emu_thread->onVMStarted();
 }
 
+void Host::OnVMRestarted()
+{
+	g_emu_thread->startTimedLimiterTimer();
+}
+
 void Host::OnVMDestroyed()
 {
 	s_center_display_window_aspect_ratio = 0.0f;

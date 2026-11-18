@@ -325,6 +325,10 @@ void Host::OnVMStarted()
 {
 }
 
+void Host::OnVMRestarted()
+{
+}
+
 void Host::OnVMDestroyed()
 {
 }

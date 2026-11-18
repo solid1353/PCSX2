@@ -188,6 +188,7 @@ public:
 
 	void Open();
 	void Close();
+	void ClearVolatileCards() { m_volatile_cards.clear(); }
 
 	s32 IsPresent(uint slot);
 	void GetSizeInfo(uint slot, McdSizeInfo& outways);
@@ -773,6 +774,12 @@ void FileMcd_SetVolatileMode(bool enabled)
 bool FileMcd_IsVolatileMode()
 {
 	return s_volatile_mode;
+}
+
+void FileMcd_ClearVolatileCards()
+{
+	pxAssert(!FileMcd_Open);
+	Mcd::impl.ClearVolatileCards();
 }
 
 void FileMcd_SetType()

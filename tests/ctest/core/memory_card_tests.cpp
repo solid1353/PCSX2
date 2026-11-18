@@ -108,6 +108,37 @@ namespace
 	};
 } // namespace
 
+TEST_F(VolatileMemoryCardTest, RecordingRestartReloadsSourceWithoutChangingVolatileMode)
+{
+	const std::vector<u8> original(2 * 528 * 16, 0xff);
+	{
+		std::ofstream source(m_path, std::ios::binary);
+		ASSERT_TRUE(source.is_open());
+		source.write(reinterpret_cast<const char*>(original.data()), original.size());
+		ASSERT_TRUE(source.good());
+	}
+	FileMcd_SetType();
+	FileMcd_EmuOpen();
+	for (int restart = 0; restart < 3; restart++)
+	{
+		std::array<u8, 8> actual = {};
+		EXPECT_EQ(FileMcd_Read(0, 0, actual.data(), 0x100, actual.size()), 1);
+		EXPECT_EQ(actual, (std::array<u8, 8>{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}));
+		const std::array<u8, 8> saved = {1, 2, 3, 4, 5, 6, 7, 8};
+		EXPECT_EQ(FileMcd_Save(0, 0, saved.data(), 0x100, saved.size()), 1);
+		EXPECT_EQ(FileMcd_Read(0, 0, actual.data(), 0x100, actual.size()), 1);
+		EXPECT_EQ(actual, saved);
+		FileMcd_EmuClose();
+		FileMcd_ClearVolatileCards();
+		EXPECT_TRUE(FileMcd_IsVolatileMode());
+		FileMcd_EmuOpen();
+	}
+	FileMcd_EmuClose();
+	std::ifstream source(m_path, std::ios::binary);
+	const std::vector<u8> after{std::istreambuf_iterator<char>(source), std::istreambuf_iterator<char>()};
+	EXPECT_EQ(after, original);
+}
+
 TEST_F(VolatileMemoryCardTest, LoadsSourceAndKeepsWritesAndErasesInRAMAcrossReopens)
 {
 	std::vector<u8> original(2 * 528 * 16, 0xff);

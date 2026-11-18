@@ -74,6 +74,7 @@ public:
 
 	void startBackgroundControllerPollTimer();
 	void stopBackgroundControllerPollTimer();
+	void startTimedLimiterTimer();
 	void updatePerformanceMetrics(bool force);
 
 public Q_SLOTS:
@@ -186,7 +187,6 @@ private:
 	void destroyBackgroundControllerPollTimer();
 	void createTimedLimiterTimer();
 	void destroyTimedLimiterTimer();
-	void startTimedLimiterTimer();
 	void connectSignals();
 
 private Q_SLOTS:

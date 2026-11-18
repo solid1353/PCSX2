@@ -72,6 +72,9 @@ public:
 
 	void handleExceededFrameCounter();
 	void handleReset();
+	bool needsPowerOnRestart() const;
+	// Called outside CPU execution. Keep recording active during boot so CDVD uses the recording RTC.
+	bool restartPowerOnRecording(const std::function<void()>& shutdown, const std::function<bool()>& boot);
 	void handleLoadingSavestate();
 	bool isTypeSavestate() const;
 	void adjustFrameCounterOnReRecord(u32 newFrameCounter);

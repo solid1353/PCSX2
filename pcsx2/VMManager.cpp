@@ -160,6 +160,7 @@ namespace VMManager
 		std::function<void(const std::string&)> error_callback);
 
 	static void LoadSettings();
+	static void ShutdownImpl(bool save_resume_state, bool restarting);
 	static void LoadCoreSettings(SettingsInterface& si);
 	static void ApplyCoreSettings();
 	static void UpdateNA228Widescreen();
@@ -194,6 +195,7 @@ static bool s_log_block_system_console = false;
 static bool s_log_force_file_log = false;
 
 static std::atomic<VMState> s_state{VMState::Shutdown};
+static VMBootParameters s_boot_parameters;
 static bool s_cpu_implementation_changed = false;
 static Threading::ThreadHandle s_vm_thread_handle;
 
@@ -1864,10 +1866,16 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 	}
 
 	PerformanceMetrics::Clear();
+	s_boot_parameters = boot_params;
 	return VMBootResult::StartupSuccess;
 }
 
 void VMManager::Shutdown(bool save_resume_state)
+{
+	ShutdownImpl(save_resume_state, false);
+}
+
+void VMManager::ShutdownImpl(bool save_resume_state, bool restarting)
 {
 	// we'll probably already be stopping (this is how Qt calls shutdown),
 	// but just in case, so any of the stuff we call here knows we don't have a valid VM.
@@ -1965,7 +1973,9 @@ void VMManager::Shutdown(bool save_resume_state)
 	SaveStateSelectorUI::Clear();
 	UpdateInhibitScreensaver(false);
 	SetEmuThreadAffinities();
-	Host::OnVMDestroyed();
+	// A recording restart boots again synchronously; reporting a stop here would exit batch mode.
+	if (!restarting)
+		Host::OnVMDestroyed();
 
 	// clear out any potentially-incorrect settings from the last game
 	LoadSettings();
@@ -1985,6 +1995,21 @@ bool VMManager::RequestReset()
 	VMManager::Reset();
 
 	return true;
+}
+
+VMBootParameters VMManager::Internal::GetInputRecordingRestartParameters(const VMBootParameters& launch)
+{
+	VMBootParameters params = launch;
+	params.save_state.clear();
+	params.state_index.reset();
+	params.input_recording.clear();
+	params.create_input_recording = false;
+	params.input_recording_capture_directory.clear();
+	params.input_recording_capture_mode.reset();
+	params.input_recording_capture_markers.clear();
+	params.input_recording_video.clear();
+	params.input_recording_video_frames.reset();
+	return params;
 }
 
 void VMManager::Reset()
@@ -2007,6 +2032,48 @@ void VMManager::Reset()
 
 	if (!Achievements::ConfirmSystemReset())
 		return;
+
+	if (g_InputRecording.needsPowerOnRestart())
+	{
+		const bool was_running = (GetState() == VMState::Resetting);
+		const VMBootParameters boot_params = Internal::GetInputRecordingRestartParameters(s_boot_parameters);
+		Error error;
+		bool boot_attempted = false;
+		const bool restarted = g_InputRecording.restartPowerOnRecording(
+			[]() {
+				ShutdownImpl(false, true);
+				// CPU providers and the VU worker live beyond VM shutdown.
+				vu1Thread.WaitVU();
+				vu1Thread.Reset();
+				// File-card RAM copies intentionally survive ordinary shutdowns and disc changes.
+				FileMcd_ClearVolatileCards();
+			},
+			[&]() {
+				boot_attempted = true;
+				if (Initialize(boot_params, &error) != VMBootResult::StartupSuccess)
+					return false;
+				// Launch-started recordings also reset once after Initialize, with the recording RTC active.
+				// Game-level frame parity still needs proper testing.
+				Reset();
+				return true;
+			});
+		if (!restarted)
+		{
+			if (!boot_attempted)
+				Host::OnVMDestroyed();
+			else
+				Host::ReportErrorAsync(TRANSLATE_STR("VMManager", "Startup Error"), error.GetDescription());
+			return;
+		}
+		// Keep the user's pause state, independently of the launch's Start Paused setting.
+		if (was_running)
+			SetState(VMState::Running);
+		else
+			Host::OnVMPaused();
+		Host::OnVMRestarted();
+		MTGS::PresentCurrentFrame();
+		return;
+	}
 
 	// Re-enforce hardcode mode constraints if we're now enabling it.
 	if (!GSDumpReplayer::IsReplayingDump() && Achievements::ResetHardcoreMode(false))

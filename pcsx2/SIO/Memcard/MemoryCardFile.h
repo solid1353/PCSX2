@@ -39,6 +39,8 @@ extern std::string FileMcd_GetDefaultName(uint slot);
 uint FileMcd_ConvertToSlot(uint port, uint slot);
 void FileMcd_SetVolatileMode(bool enabled);
 bool FileMcd_IsVolatileMode();
+// Forget file-card RAM copies after closing the cards, so the next boot reloads their source contents.
+void FileMcd_ClearVolatileCards();
 void FileMcd_SetType();
 void FileMcd_EmuOpen();
 void FileMcd_EmuClose();

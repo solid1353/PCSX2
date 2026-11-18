@@ -304,6 +304,9 @@ namespace VMManager
 	/// Internal callbacks, implemented in the emu core.
 	namespace Internal
 	{
+		/// Retain launch options, but start from power-on rather than loading a state or starting another recording.
+		VMBootParameters GetInputRecordingRestartParameters(const VMBootParameters& launch);
+
 		/// Checks settings version. Call once on startup. If it returns false, you should prompt the user to reset.
 		bool CheckSettingsVersion();
 
@@ -395,6 +398,9 @@ namespace Host
 
 	/// Called when the VM is created.
 	void OnVMStarted();
+
+	/// Called after a power-on recording has rebooted, to restart launch timers.
+	void OnVMRestarted();
 
 	/// Called when the VM is shut down or destroyed.
 	void OnVMDestroyed();

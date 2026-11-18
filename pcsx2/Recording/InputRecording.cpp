@@ -751,6 +751,41 @@ void InputRecording::handleExceededFrameCounter()
 	}
 }
 
+bool InputRecording::needsPowerOnRestart() const
+{
+	return m_is_active && m_initial_load_complete && m_type == Type::POWER_ON && m_controls.isRecording();
+}
+
+bool InputRecording::restartPowerOnRecording(const std::function<void()>& shutdown, const std::function<bool()>& boot)
+{
+	pxAssert(needsPowerOnRestart());
+	// Preserve the session across shutdown without closing it through stop() or queuing a deferred close.
+	m_is_active = false;
+	shutdown();
+	m_is_active = true;
+	m_recordingQueue = {};
+	m_controls.clearControlQueue();
+	if (!m_file.restartPowerOnRecording())
+	{
+		closeActiveFile();
+		InputRec::log(TRANSLATE_STR("InputRecording", "Failed to restart input recording; recording stopped."), Host::OSD_ERROR_DURATION);
+		return false;
+	}
+	m_starting_frame = 0;
+	m_frame_counter_stateless = 0;
+	m_video_audio.clear();
+	initializeState();
+	m_initial_load_complete = false;
+	if (!boot())
+	{
+		closeActiveFile();
+		return false;
+	}
+	m_initial_load_complete = true;
+	InputRec::log(TRANSLATE_STR("InputRecording", "Input recording restarted from power-on."), Host::OSD_INFO_DURATION);
+	return true;
+}
+
 void InputRecording::handleReset()
 {
 	if (isInputOnly())
@@ -758,22 +793,7 @@ void InputRecording::handleReset()
 	m_video_audio.clear();
 	if (m_initial_load_complete)
 	{
-		if (m_is_active && m_type == Type::POWER_ON && m_controls.isRecording())
-		{
-			if (!m_file.restartPowerOnRecording())
-			{
-				closeActiveFile();
-				InputRec::log(TRANSLATE_STR("InputRecording", "Failed to restart input recording; recording stopped."), Host::OSD_ERROR_DURATION);
-				return;
-			}
-			m_frame_counter_stateless = 0;
-			initializeState();
-			InputRec::log(TRANSLATE_STR("InputRecording", "Input recording restarted from power-on."), Host::OSD_INFO_DURATION);
-		}
-		else
-		{
-			adjustFrameCounterOnReRecord(0);
-		}
+		adjustFrameCounterOnReRecord(0);
 	}
 	m_initial_load_complete = true;
 }

@@ -37,12 +37,18 @@ exact destination, whose missing parents are created at that point too.
 A recording that starts from a savestate keeps that savestate in the
 directory `<recording>_SaveState` next to the recording.
 
-During a power-on recording, **System → Restart** starts that recording over
-from power-on in the same file, still in record mode. Both frame counters,
-the total frame count, and the undo count return to zero, and all previously
-recorded pad samples are removed. The file keeps its game, author, and
-emulator metadata and contains only the run after the last restart, even
-when that run is shorter. A reset during playback keeps the existing replay
+During a power-on recording in record mode, **System → Restart** fully shuts
+down and boots the VM with the original launch's disc or ELF and boot options,
+with the same process PNACHs, memory card mode, and settings applied as on a
+fresh launch. The recording stays active during boot so its fixed RTC applies.
+Volatile memory cards reload their source contents; persistent card writes
+remain on disk, so reproducing a run still requires the same initial card
+contents. The same recording file is reopened at frame 0 in record mode,
+preserving its notification policy and whether emulation was paused.
+Both frame counters, the total frame count, and the undo count return to zero,
+and all previously recorded pad samples are removed. The file keeps its game,
+author, and emulator metadata and contains only the run after the last restart,
+even when that run is shorter. A reset during playback keeps the existing replay
 behavior. Savestate-based recordings and input-only recordings are unchanged.
 
 ## Recording from the current frame
@@ -245,8 +251,12 @@ it with the other state files.
   settings.
 - The same tests cover the input-only format marker, raw pad round trips,
   rejection of input-only replay, invalid origin markers, and truncated samples.
-  They also cover power-on recording restarts, removal of old samples and
+  They also cover shutdown/boot ordering for power-on recording restarts,
+  recording activity during boot for the RTC, retained launch parameters,
+  failed restarts, discarded deferred actions, removal of old samples and
   counters, shorter replacement runs, and unchanged playback/input-only resets.
+  Memory card tests cover reloading volatile source contents on a recording
+  restart while ordinary reopens retain RAM writes.
   Recording creation also covers missing parents for every recording origin
   and directory-creation failures.
   Notification tests cover console logging and OSD delivery for quiet and

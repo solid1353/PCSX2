@@ -16,12 +16,6 @@
 #include <vector>
 #include <array>
 
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
 void InputRecordingFile::InputRecordingFileHeader::init() noexcept
 {
 	m_fileVersion = 1;
@@ -145,16 +139,14 @@ bool InputRecordingFile::restartPowerOnRecording()
 		return false;
 	}
 
-	const size_t header_size = getRecordingBlockSeekPoint(0);
-#ifdef _WIN32
-	if (_chsize_s(_fileno(m_recordingFile), header_size) != 0)
-#else
-	if (ftruncate(fileno(m_recordingFile), static_cast<off_t>(header_size)) != 0)
-#endif
-	{
+	const std::string filename = m_filename;
+	if (!close())
 		return false;
-	}
-
+	m_recordingFile = FileSystem::OpenCFile(filename.c_str(), "wb+");
+	if (!m_recordingFile)
+		return false;
+	m_filename = filename;
+	m_writable = true;
 	m_totalFrames = 0;
 	m_undoCount = 0;
 	return writeHeader() && fflush(m_recordingFile) == 0;

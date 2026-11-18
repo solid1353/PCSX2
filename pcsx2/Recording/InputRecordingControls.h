@@ -27,6 +27,7 @@ public:
 	bool isReplaying() const;
 
 	void processControlQueue();
+	void clearControlQueue() { m_controlQueue = {}; }
 
 private:
 	Mode m_state = Mode::Replaying;

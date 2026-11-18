@@ -7,6 +7,8 @@
 #include "Recording/Utilities/InputRecordingLogger.h"
 #include "DebugTools/Debug.h"
 #include "Host.h"
+#include "VMManager.h"
+#include "CDVD/CDVD.h"
 #include "Input/InputManager.h"
 #include "GS/Renderers/Common/GSRenderer.h"
 
@@ -108,6 +110,32 @@ protected:
 			ASSERT_TRUE(m_recording.m_file.close());
 			ASSERT_TRUE(m_recording.m_file.openExisting(m_path));
 		}
+		EXPECT_EQ(m_recording.needsPowerOnRestart(), type == InputRecording::Type::POWER_ON && !replay && initial_load_complete);
+	}
+
+	bool Restart(bool boot_succeeds = true)
+	{
+		int stage = 0;
+		const bool restarted = m_recording.restartPowerOnRecording(
+			[&]() {
+				EXPECT_EQ(stage++, 0);
+				EXPECT_FALSE(m_recording.isActive());
+				// Shutdown must not stop the recording, close the file, or queue a deferred close.
+				EXPECT_EQ(m_recording.getData().getFilename(), m_path);
+			},
+			[&]() {
+				EXPECT_EQ(stage++, 1);
+				// CDVD reset must already see an active recording, including during boot initialization.
+				EXPECT_TRUE(m_recording.isActive());
+				EXPECT_FALSE(m_recording.needsPowerOnRestart());
+				EXPECT_TRUE(m_recording.getControls().isRecording());
+				EXPECT_EQ(m_recording.getFrameCounter(), 0u);
+				EXPECT_EQ(m_recording.getFrameCounterStateless(), 0u);
+				EXPECT_EQ(FileSize(), 570);
+				return boot_succeeds;
+			});
+		EXPECT_EQ(stage, 2);
+		return restarted;
 	}
 
 	void TearDown() override
@@ -133,7 +161,7 @@ TEST_F(InputRecordingResetTest, RestartDiscardsOldRunAndKeepsRecording)
 {
 	Prepare(InputRecording::Type::POWER_ON);
 	ASSERT_FALSE(HasFatalFailure());
-	m_recording.handleReset();
+	ASSERT_TRUE(Restart());
 	EXPECT_TRUE(m_recording.isActive());
 	EXPECT_TRUE(m_recording.getControls().isRecording());
 	EXPECT_EQ(m_recording.getFrameCounter(), 0u);
@@ -179,7 +207,7 @@ TEST_F(InputRecordingResetTest, RepeatedRestartDropsEachPreviousRun)
 	ASSERT_FALSE(HasFatalFailure());
 	for (int restart = 0; restart < 3; restart++)
 	{
-		m_recording.handleReset();
+		ASSERT_TRUE(Restart());
 		EXPECT_TRUE(m_recording.getControls().isRecording());
 		EXPECT_EQ(m_recording.getFrameCounter(), 0u);
 		EXPECT_EQ(m_recording.getFrameCounterStateless(), 0u);
@@ -187,6 +215,85 @@ TEST_F(InputRecordingResetTest, RepeatedRestartDropsEachPreviousRun)
 		m_recording.incFrameCounter();
 		m_recording.saveControllerData(PadData(0, 0, std::array<u8, 18>{}), 0, 0);
 	}
+}
+
+TEST_F(InputRecordingResetTest, FailedBootClosesRecording)
+{
+	Prepare(InputRecording::Type::POWER_ON);
+	ASSERT_FALSE(HasFatalFailure());
+	EXPECT_FALSE(Restart(false));
+	EXPECT_FALSE(m_recording.isActive());
+	EXPECT_FALSE(m_recording.needsPowerOnRestart());
+	InputRecordingFile saved;
+	ASSERT_TRUE(saved.openExisting(m_path));
+	EXPECT_EQ(saved.getTotalFrames(), 0u);
+	EXPECT_EQ(saved.getAuthor(), std::string("Test author"));
+}
+
+TEST_F(InputRecordingResetTest, RestartDropsDeferredCloseAndModeChangesFromPreviousRun)
+{
+	Prepare(InputRecording::Type::POWER_ON);
+	ASSERT_FALSE(HasFatalFailure());
+	m_recording.stop();
+	m_recording.getControls().setReplayMode();
+	ASSERT_TRUE(Restart());
+	m_recording.processRecordQueue();
+	m_recording.getControls().processControlQueue();
+	EXPECT_TRUE(m_recording.isActive());
+	EXPECT_TRUE(m_recording.getControls().isRecording());
+}
+
+TEST_F(InputRecordingResetTest, InactiveRecordingDoesNotRequestPowerOnRestart)
+{
+	EXPECT_FALSE(m_recording.needsPowerOnRestart());
+}
+
+TEST(InputRecordingRestart, RetainsLaunchParametersWithoutLoadingStateOrStartingAnotherSession)
+{
+	VMBootParameters launch;
+	launch.filename = "launch.iso";
+	launch.elf_override = "launch.elf";
+	launch.source_type = CDVD_SourceType::Iso;
+	launch.fast_boot = false;
+	launch.fullscreen = true;
+	launch.start_turbo = false;
+	launch.start_unlimited = true;
+	launch.start_unlimited_frame_count = 120;
+	launch.unlimited_frame_fallback_mode = LimiterModeType::Turbo;
+	launch.unlimited_on_reset = true;
+	launch.disable_achievements_hardcore_mode = true;
+	launch.save_state = "launch-state";
+	launch.state_index = 3;
+	launch.input_recording = "recording.p2m2";
+	launch.create_input_recording = true;
+	launch.input_recording_capture_directory = "captures";
+	launch.input_recording_capture_mode = InputRecordingCaptureMode::Screenshots;
+	launch.input_recording_capture_markers = {{1, 2}};
+	launch.input_recording_video = "capture.mkv";
+	launch.input_recording_video_frames = {{0, 9}};
+	const VMBootParameters restart = VMManager::Internal::GetInputRecordingRestartParameters(launch);
+	EXPECT_EQ(restart.filename, launch.filename);
+	EXPECT_EQ(restart.elf_override, launch.elf_override);
+	EXPECT_EQ(restart.source_type, launch.source_type);
+	EXPECT_EQ(restart.fast_boot, launch.fast_boot);
+	EXPECT_EQ(restart.fullscreen, launch.fullscreen);
+	EXPECT_EQ(restart.start_turbo, launch.start_turbo);
+	EXPECT_EQ(restart.start_unlimited, launch.start_unlimited);
+	EXPECT_EQ(restart.start_unlimited_frame_count, launch.start_unlimited_frame_count);
+	EXPECT_EQ(restart.unlimited_frame_fallback_mode, launch.unlimited_frame_fallback_mode);
+	EXPECT_EQ(restart.unlimited_on_reset, launch.unlimited_on_reset);
+	EXPECT_EQ(restart.disable_achievements_hardcore_mode, launch.disable_achievements_hardcore_mode);
+	EXPECT_TRUE(restart.save_state.empty());
+	EXPECT_FALSE(restart.state_index);
+	EXPECT_TRUE(restart.input_recording.empty());
+	EXPECT_FALSE(restart.create_input_recording);
+	EXPECT_TRUE(restart.input_recording_capture_directory.empty());
+	EXPECT_FALSE(restart.input_recording_capture_mode);
+	EXPECT_TRUE(restart.input_recording_capture_markers.empty());
+	EXPECT_TRUE(restart.input_recording_video.empty());
+	EXPECT_FALSE(restart.input_recording_video_frames);
+	EXPECT_EQ(launch.save_state, "launch-state");
+	EXPECT_EQ(launch.input_recording, "recording.p2m2");
 }
 
 TEST_F(InputRecordingResetTest, PlaybackResetPreservesFileAndReplayMode)
@@ -303,7 +410,7 @@ TEST_P(InputRecordingNotificationTest, RestartAndCloseKeepTheSessionNotification
 	ExpectMessage("Record Mode Enabled", GetParam());
 	for (int restart = 0; restart < 2; restart++)
 	{
-		g_InputRecording.handleReset();
+		ASSERT_TRUE(g_InputRecording.restartPowerOnRecording([]() {}, []() { return true; }));
 		EXPECT_TRUE(g_InputRecording.isActive());
 		EXPECT_EQ(g_InputRecording.areOSDMessagesEnabled(), GetParam());
 	}
@@ -338,7 +445,11 @@ TEST_P(InputRecordingNotificationTest, RestartFailureKeepsErrorsQuietAfterClosin
 	StartPowerOn();
 	ASSERT_FALSE(HasFatalFailure());
 	CloseFileBeforeRestart();
-	g_InputRecording.handleReset();
+	bool boot_attempted = false;
+	EXPECT_FALSE(g_InputRecording.restartPowerOnRecording([]() {}, [&]() {
+		boot_attempted = true;
+		return true; }));
+	EXPECT_FALSE(boot_attempted);
 	EXPECT_FALSE(g_InputRecording.isActive());
 	ExpectMessage("Unable to stop input recording", GetParam());
 	ExpectMessage("Failed to restart input recording; recording stopped.", GetParam());

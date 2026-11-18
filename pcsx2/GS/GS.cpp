@@ -528,7 +528,13 @@ bool GSEndCapture()
 
 bool GSBeginReplayCapture(std::string filename)
 {
-	return g_gs_renderer && g_gs_renderer->BeginCapture(std::move(filename), GSVector2i(640, 480), true, true);
+	return g_gs_renderer && g_gs_renderer->BeginCapture(std::move(filename), GSVector2i(0, 0), true, true);
+}
+
+void GSQueueReplayCapture(std::function<void()> callback)
+{
+	if (g_gs_renderer)
+		g_gs_renderer->QueueReplayCapture(std::move(callback));
 }
 
 void GSPresentCurrentFrame()

@@ -513,16 +513,28 @@ void InputRecording::prepareVideoFrame()
 	if (!isCapturingVideo() || m_frame_counter < m_video_frames->first || m_frame_counter > m_video_frames->last)
 		return;
 
-	bool okay = true;
-	MTGS::RunOnGSThread([this, samples = std::move(m_video_audio), &okay]() {
-		if (!m_video_started)
-			okay = GSBeginReplayCapture(m_video_path);
-		if (okay)
-			okay = GSCapture::DeliverReplayAudio(samples);
+	m_video_frame_okay = false;
+	MTGS::RunOnGSThread([this, samples = std::move(m_video_audio)]() mutable {
+		auto deliver = [this, samples = std::move(samples)]() {
+			m_video_frame_okay = (m_video_started || GSBeginReplayCapture(m_video_path)) &&
+			                     GSCapture::DeliverReplayAudio(samples);
+		};
+		if (m_video_started)
+			deliver();
+		else
+			GSQueueReplayCapture(std::move(deliver));
 	});
-	MTGS::WaitGS(false);
 	m_video_audio.clear();
-	if (!okay)
+}
+
+void InputRecording::finishVideoFrame()
+{
+	if (!isCapturingVideo() || m_frame_counter < m_video_frames->first || m_frame_counter > m_video_frames->last)
+		return;
+
+	// Startup and the first audio packet run after Merge, before this VSync's video delivery.
+	MTGS::WaitGS(false);
+	if (!m_video_frame_okay)
 	{
 		Console.Error("Input recording video capture failed to start or write audio.");
 		// Close a partially opened capture too, before batch shutdown.
@@ -536,11 +548,7 @@ void InputRecording::prepareVideoFrame()
 		return;
 	}
 	m_video_started = true;
-}
-
-void InputRecording::finishVideoFrame()
-{
-	if (!isCapturingVideo() || m_frame_counter != m_video_frames->last)
+	if (m_frame_counter != m_video_frames->last)
 		return;
 
 	const s64 expected = static_cast<s64>(m_video_frames->last) - m_video_frames->first + 1;

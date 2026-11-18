@@ -651,6 +651,13 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 	}
 
 	const bool blank_frame = !Merge(field);
+	if (m_replay_capture_start)
+	{
+		// Merge has established this selected frame's internal size, even at counter zero.
+		std::function<void()> callback = std::move(m_replay_capture_start);
+		m_replay_capture_start = {};
+		callback();
+	}
 
 	m_last_draw_n = s_n;
 	m_last_transfer_n = s_transfer_n;
@@ -1083,15 +1090,24 @@ void GSSetDisplayAlignment(GSDisplayAlignment alignment)
 	s_display_alignment = alignment;
 }
 
+void GSRenderer::QueueReplayCapture(std::function<void()> callback)
+{
+	m_replay_capture_start = std::move(callback);
+}
+
+GSVector2i GSRenderer::GetCaptureResolution(const GSVector2i& size, bool recording_replay)
+{
+	if (recording_replay)
+		return GetInternalResolution();
+	if (size.x != 0 && size.y != 0)
+		return size;
+	return GSConfig.VideoCaptureAutoResolution ? GetInternalResolution() :
+	                                             GSVector2i(GSConfig.VideoCaptureWidth, GSConfig.VideoCaptureHeight);
+}
+
 bool GSRenderer::BeginCapture(std::string filename, const GSVector2i& size, bool force_audio_video, bool recording_replay)
 {
-	const GSVector2i capture_resolution = (size.x != 0 && size.y != 0) ?
-											  size :
-											  (GSConfig.VideoCaptureAutoResolution ?
-													  GetInternalResolution() :
-													  GSVector2i(GSConfig.VideoCaptureWidth, GSConfig.VideoCaptureHeight));
-
-	return GSCapture::BeginCapture(GetTvRefreshRate(), capture_resolution,
+	return GSCapture::BeginCapture(GetTvRefreshRate(), GetCaptureResolution(size, recording_replay),
 		GetCurrentAspectRatioFloat(GetVideoMode() == GSVideoMode::SDTV_480P),
 		std::move(filename), force_audio_video, recording_replay);
 }

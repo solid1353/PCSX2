@@ -43,9 +43,17 @@ selects the image at the VSync ending that interval and every SPU2 sample
 generated during it. `120-179` therefore writes exactly 60 video frames.
 Only power-on recordings are accepted, and ranges beyond the recording fail.
 
-Capture uses fixed 640 x 480 frames, single-threaded lossless FFV1 in RGB,
-and stereo PCM float audio at the emulated console's sample rate. It ignores
-the desktop capture codec, resolution, bitrate, and encoder-parameter settings.
+Capture uses the first selected frame's internal render resolution, including
+the rendering upscale, through the same size selection as PINE
+`StartVideoCapture` with automatic resolution. GSCapture rounds each dimension
+up to a multiple of eight, as it does for PINE (for example, 2560 x 2240 stays
+2560 x 2240). The size is fixed for the whole file; later internal resolution
+changes scale into that starting size without restarting capture. Window size
+and surfaceless mode do not choose the output size.
+
+Capture uses single-threaded lossless FFV1 in RGB and stereo PCM float audio
+at the emulated console's sample rate. It ignores the desktop capture codec,
+resolution, bitrate, and encoder-parameter settings.
 Codec and container bitexact flags exclude wall-clock muxing metadata. The
 recording's existing fixed RTC applies; it advances with emulated VSyncs.
 Use the same emulator build, rendering settings, BIOS, ISO, PNACHs, and initial
@@ -71,9 +79,9 @@ the FFmpeg runtime with FFV1 and PCM float encoders. It cannot accompany
 `-agent-replay`.
 Marker capture may accompany video, but savestate creation can affect a game's
 rendering; use video alone for takes that must avoid those side effects.
-Repeated decoded video/audio equality, capture timing, and renderer switches
-still need proper runtime testing; unit tests cover parsing and validation,
-not encoder or emulator output.
+Repeated decoded video/audio equality, capture timing, resolution changes, and
+renderer switches still need proper runtime testing; unit tests cover parsing,
+validation, and resolution selection, not encoder or emulator output.
 
 ## Marker capture
 
@@ -144,6 +152,8 @@ it with the other state files.
   playback, the record-mode lock during playback, capture mode and marker
   parsing, marker selection, capture directories, and inclusive video frame
   ranges (including zero, equal endpoints, malformed ranges, and overflow),
-  plus rejection of invalid capture options and savestate recordings before boot.
+  plus rejection of invalid capture options and savestate recordings before boot,
+  and internal capture resolution selection independent of desktop capture
+  settings.
 - `tests/ctest/core/patch_tests.cpp` (`InputRecordingPath` tests) covers exact
   absolute paths and relative paths below the primary folder.

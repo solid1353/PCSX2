@@ -4,6 +4,7 @@
 #include "Recording/InputRecording.h"
 #include "Recording/InputRecordingControls.h"
 #include "Recording/InputRecordingFile.h"
+#include "GS/Renderers/Common/GSRenderer.h"
 
 #include "common/Path.h"
 
@@ -16,6 +17,25 @@
 
 namespace
 {
+	class CaptureResolutionRenderer final : public GSRenderer
+	{
+	public:
+		void SetInternalResolution(const GSVector2i& size) { m_real_size = size; }
+
+	protected:
+		void Draw() override {}
+		GSTexture* GetOutput(int, float&, int&) override { return nullptr; }
+	};
+
+	class InputRecordingResolutionTest : public testing::Test
+	{
+	protected:
+		void TearDown() override { GSConfig = m_original_config; }
+
+		const Pcsx2Config::GSOptions m_original_config = GSConfig;
+		CaptureResolutionRenderer m_renderer;
+	};
+
 	class InputRecordingFileTest : public testing::Test
 	{
 	protected:
@@ -38,6 +58,53 @@ namespace
 		std::string m_path;
 	};
 } // namespace
+
+TEST_F(InputRecordingResolutionTest, ReplayUsesInternalResolutionRegardlessOfDesktopCaptureSettings)
+{
+	for (const GSVector2i internal_size : {GSVector2i(2560, 2240), GSVector2i(1280, 896), GSVector2i(512, 448)})
+	{
+		m_renderer.SetInternalResolution(internal_size);
+		for (const bool automatic : {false, true})
+		{
+			GSConfig.VideoCaptureAutoResolution = automatic;
+			GSConfig.VideoCaptureWidth = 1920;
+			GSConfig.VideoCaptureHeight = 1080;
+			for (const GSVector2i requested_size : {GSVector2i(0, 0), GSVector2i(640, 480)})
+			{
+				const GSVector2i size = m_renderer.GetCaptureResolution(requested_size, true);
+				EXPECT_EQ(size.x, internal_size.x);
+				EXPECT_EQ(size.y, internal_size.y);
+			}
+		}
+	}
+}
+
+TEST_F(InputRecordingResolutionTest, ReplayMatchesPineAutomaticResolution)
+{
+	m_renderer.SetInternalResolution(GSVector2i(2560, 2240));
+	GSConfig.VideoCaptureAutoResolution = true;
+	const GSVector2i pine_size = m_renderer.GetCaptureResolution(GSVector2i(0, 0), false);
+	GSConfig.VideoCaptureAutoResolution = false;
+	const GSVector2i replay_size = m_renderer.GetCaptureResolution(GSVector2i(0, 0), true);
+	EXPECT_EQ(replay_size.x, pine_size.x);
+	EXPECT_EQ(replay_size.y, pine_size.y);
+	EXPECT_EQ(replay_size.x, 2560);
+	EXPECT_EQ(replay_size.y, 2240);
+}
+
+TEST_F(InputRecordingResolutionTest, DesktopCaptureKeepsCustomAndExplicitResolutions)
+{
+	m_renderer.SetInternalResolution(GSVector2i(2560, 2240));
+	GSConfig.VideoCaptureAutoResolution = false;
+	GSConfig.VideoCaptureWidth = 1920;
+	GSConfig.VideoCaptureHeight = 1080;
+	const GSVector2i desktop_size = m_renderer.GetCaptureResolution(GSVector2i(0, 0), false);
+	EXPECT_EQ(desktop_size.x, 1920);
+	EXPECT_EQ(desktop_size.y, 1080);
+	const GSVector2i explicit_size = m_renderer.GetCaptureResolution(GSVector2i(1280, 720), false);
+	EXPECT_EQ(explicit_size.x, 1280);
+	EXPECT_EQ(explicit_size.y, 720);
+}
 
 TEST_F(InputRecordingFileTest, AllowsConcurrentReadOnlyPlayback)
 {

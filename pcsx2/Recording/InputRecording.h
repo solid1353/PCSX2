@@ -95,6 +95,7 @@ private:
 	std::optional<InputRecordingVideoFrameRange> m_video_frames;
 	std::vector<float> m_video_audio;
 	bool m_video_started = false;
+	bool m_video_frame_okay = false;
 	bool m_video_complete = false;
 
 	// A consistent way to run actions at the end of the each frame (ie. stop the recording)

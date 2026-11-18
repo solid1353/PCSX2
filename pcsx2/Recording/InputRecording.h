@@ -32,7 +32,8 @@ public:
 	enum class Type
 	{
 		POWER_ON,
-		FROM_SAVESTATE
+		FROM_SAVESTATE,
+		NO_STATE
 	};
 
 	bool create(const std::string& filename, const bool fromSaveState, const std::string& authorName);
@@ -41,6 +42,8 @@ public:
 		const InputRecordingCaptureMarkerRanges& capture_marker_ranges = {},
 		const std::string& video_path = {}, std::optional<InputRecordingVideoFrameRange> video_frames = {});
 	void stop();
+	void toggleInputRecording();
+	bool isInputOnly() const { return m_is_active && m_type == Type::NO_STATE; }
 
 	static void InformGSThread();
 	void handleControllerDataUpdate();
@@ -78,7 +81,7 @@ private:
 	InputRecordingControls m_controls;
 	InputRecordingFile m_file;
 
-	Type m_type;
+	Type m_type = Type::POWER_ON;
 
 	bool m_initial_load_complete = false;
 	bool m_is_active = false;
@@ -107,6 +110,7 @@ private:
 	u32 m_starting_frame = 0;
 
 	void initializeState();
+	bool createInputOnly(const std::string& filename);
 	void closeActiveFile();
 	void captureReplayMarker();
 };

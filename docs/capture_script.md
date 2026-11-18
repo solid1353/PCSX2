@@ -16,14 +16,26 @@ script as one argument, including on macOS. Names are lowercase.
 | `wait <condition> within <frames>` | Execute frames and check the condition at each completed VSync. The last allowed frame may satisfy it; otherwise fail at that boundary. Always executes at least one frame. |
 | `run <frames>` | Execute that many VSync intervals. Zero is allowed. |
 | `hold <buttons>` | Replace pad 0's held buttons for the next interval and all following intervals until another `hold`. |
+| `sticks <rx> <ry> <lx> <ly>` | Replace pad 0's right X/Y and left X/Y stick bytes for the next interval and following intervals until another `sticks`. Each axis is an integer in 0–255, decimal or hexadecimal. |
 | `capture <path.mkv>` | Arm video and audio capture for the next interval. The parent folder must exist; replace an existing file. Relative paths use the working directory. Spaces in the path are accepted; optional double quotes around the path are removed. |
 | `stop` | Drain and finalize the active capture before executing another statement. |
 
 Buttons are `cross`, `circle`, `square`, `triangle`, `up`, `down`, `left`,
 `right`, `l1`, `l2`, `l3`, `r1`, `r2`, `r3`, `start`, and `select`, joined
-with `+`. `hold none` releases everything. Pad 0 starts neutral, its sticks
-stay centered, and pressure buttons use full pressure. Pad 1 stays neutral.
+with `+`. `hold none` releases the buttons without changing the sticks.
+Pad 0 starts neutral, with all stick axes at 127, and pressure buttons use
+full pressure. Pad 1 stays neutral.
 Host pad bindings and macros cannot supply input during a script.
+
+Stick values and their order exactly match recording pad bytes 2–5:
+right X, right Y, left X, left Y. Zero is left/up, 255 is right/down, and
+127 is centered. `sticks 127 127 127 127` centers both sticks. Button and
+stick statements are independent, so both can remain held across `run` and
+`wait` statements. For example:
+
+```text
+sticks 127 127 255 127; hold cross; run 30; hold none; sticks 127 127 127 127
+```
 
 Instant statements consume no frames. `capture take.mkv; run N; stop` writes
 exactly N frames and the SPU2 samples produced during those intervals. A

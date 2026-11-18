@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "Recording/CaptureScript.h"
+#include "Recording/PadData.h"
 
 #include <gtest/gtest.h>
 
@@ -85,6 +86,11 @@ TEST(CaptureScriptParser, RejectsMalformedScriptsBeforeExecution)
 		"hold cross+",
 		"hold none+cross",
 		"hold cross run 1",
+		"sticks",
+		"sticks 0 1 2",
+		"sticks 0 1 2 256",
+		"sticks -1 127 127 127",
+		"sticks 0 1 2 3 4",
 		"stop",
 		"capture a.mp4; run 1; stop",
 		"capture a.mkv",
@@ -235,4 +241,39 @@ TEST_F(CaptureScriptTest, CaptureAndFinalizationErrorsAbortRemainingStatements)
 	EXPECT_FALSE(runner->IsComplete());
 	EXPECT_EQ(runner->GetButtons(), 0);
 	EXPECT_NE(runner->GetError().find("could not finalize capture"), std::string::npos);
+}
+
+TEST_F(CaptureScriptTest, RawSticksPersistIndependentlyOfHeldButtonsAtFrameBoundaries)
+{
+	auto runner = MakeRunner("run 1; sticks 0 255 64 192; hold cross; run 2; hold none; run 1; sticks 127 127 127 127; run 1");
+	ASSERT_TRUE(runner);
+	ASSERT_TRUE(runner->Start(CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetSticks(), (std::array<u8, 4>{127, 127, 127, 127}));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetSticks(), (std::array<u8, 4>{0, 255, 64, 192}));
+	EXPECT_EQ(runner->GetButtons(), 1u << 14);
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetSticks(), (std::array<u8, 4>{0, 255, 64, 192}));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetButtons(), 0);
+	EXPECT_EQ(runner->GetSticks(), (std::array<u8, 4>{0, 255, 64, 192}));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetSticks(), (std::array<u8, 4>{127, 127, 127, 127}));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_TRUE(runner->IsComplete());
+	EXPECT_EQ(runner->GetFrameCount(), 5);
+}
+
+TEST_F(CaptureScriptTest, CopiesRecordedStickBytesWithoutConversionOrReordering)
+{
+	const PadData recorded(0, 0, {0xff, 0xff, 19, 237, 0, 255});
+	const auto bytes = recorded.ToArray();
+	auto runner = MakeRunner("sticks " + std::to_string(bytes[2]) + " " + std::to_string(bytes[3]) + " " +
+							 std::to_string(bytes[4]) + " " + std::to_string(bytes[5]) + "; run 1; sticks 0xff 0x00 0x7f 0x80");
+	ASSERT_TRUE(runner);
+	ASSERT_TRUE(runner->Start(CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetSticks(), (std::array<u8, 4>{19, 237, 0, 255}));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetSticks(), (std::array<u8, 4>{255, 0, 127, 128}));
+	EXPECT_TRUE(runner->IsComplete());
 }

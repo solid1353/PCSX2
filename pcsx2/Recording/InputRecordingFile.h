@@ -17,6 +17,15 @@
 // Handles all operations on the input recording file
 class InputRecordingFile
 {
+public:
+	enum class StartType : u8
+	{
+		PowerOn = 0,
+		SaveState = 1,
+		None = 2,
+	};
+
+private:
 	struct InputRecordingFileHeader
 	{
 		u8 m_fileVersion = 1;
@@ -27,6 +36,7 @@ class InputRecordingFile
 	public:
 		void init() noexcept;
 	} m_header = {};
+	static_assert(sizeof(InputRecordingFileHeader) == 561);
 
 
 public:
@@ -48,6 +58,7 @@ public:
 
 	// Whether or not this input recording starts by loading a save-state or by booting the game fresh
 	bool fromSaveState() const noexcept;
+	bool hasStartingState() const noexcept { return m_start_type != StartType::None; }
 	// Increment the number of undo actions and commit it to the recording file
 	void incrementUndoCount();
 	// Open an existing recording file for shared, read-only playback
@@ -55,6 +66,7 @@ public:
 	// Create and open a brand new input recording, either starting from a save-state or from
 	// booting the game
 	bool openNew(const std::string& path, bool fromSaveState);
+	bool openNew(const std::string& path, StartType start_type);
 	// Reads the current frame's input data from the file in order to intercept and overwrite
 	// the current frame's value from the emulator
 	std::optional<PadData> readPadData(const uint frame, const uint port, const uint slot);
@@ -82,7 +94,7 @@ private:
 	// + 4 + 4 is the totalFrame and undoCount values
 	static constexpr size_t s_headerSize = sizeof(InputRecordingFileHeader) + 4 + 4;
 	// DEPRECATED / Slated for Removal
-	static constexpr size_t s_recordingSavestateHeaderSize = sizeof(bool);
+	static constexpr size_t s_recordingSavestateHeaderSize = sizeof(StartType);
 	static constexpr size_t s_seekpointTotalFrames = sizeof(InputRecordingFileHeader);
 	static constexpr size_t s_seekpointUndoCount = sizeof(InputRecordingFileHeader) + 4;
 	static constexpr size_t s_seekpointSaveStateHeader = s_seekpointUndoCount + 4;
@@ -90,7 +102,7 @@ private:
 	std::string m_filename = "";
 	FILE* m_recordingFile = nullptr;
 	bool m_writable = false;
-	bool m_savestate = false;
+	StartType m_start_type = StartType::PowerOn;
 
 	// An signed 32-bit frame limit is equivalent to 1.13 years of continuous 60fps footage
 	u32 m_totalFrames = 0;

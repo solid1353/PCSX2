@@ -244,6 +244,11 @@ DEFINE_HOTKEY("InputRecToggleMode", TRANSLATE_NOOP("Hotkeys", "System"),
 		if (!pressed && VMManager::HasValidVM())
 			g_InputRecording.getControls().toggleRecordMode();
 	})
+DEFINE_HOTKEY("ToggleInputRecording", TRANSLATE_NOOP("Hotkeys", "System"),
+	TRANSLATE_NOOP("Hotkeys", "Toggle Input Recording"), [](s32 pressed) {
+		if (!pressed && VMManager::HasValidVM())
+			Host::RunOnCPUThread([]() { g_InputRecording.toggleInputRecording(); });
+	})
 DEFINE_HOTKEY("PreviousSaveStateSlot", TRANSLATE_NOOP("Hotkeys", "Save States"),
 	TRANSLATE_NOOP("Hotkeys", "Select Previous Save Slot"), [](s32 pressed) {
 		if (!pressed && VMManager::HasValidVM())

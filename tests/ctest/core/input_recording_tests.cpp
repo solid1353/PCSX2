@@ -4,9 +4,11 @@
 #include "Recording/InputRecording.h"
 #include "Recording/InputRecordingControls.h"
 #include "Recording/InputRecordingFile.h"
+#include "Input/InputManager.h"
 #include "GS/Renderers/Common/GSRenderer.h"
 
 #include "common/Path.h"
+#include "common/FileSystem.h"
 
 #include <gtest/gtest.h>
 
@@ -133,6 +135,114 @@ TEST(InputRecordingControls, PreventsRecordModeForReadOnlyPlayback)
 	controls.setRecordModeEnabled(true);
 	controls.setRecordMode(false);
 	EXPECT_TRUE(controls.isRecording());
+}
+
+TEST(InputRecordingHotkey, IsListedInSystemWithoutADefaultBinding)
+{
+	const HotkeyInfo* hotkey = InputManager::GetHotkeyInfo("ToggleInputRecording");
+	ASSERT_NE(hotkey, nullptr);
+	EXPECT_STREQ(hotkey->display_name, "Toggle Input Recording");
+	EXPECT_STREQ(hotkey->category, "System");
+	EXPECT_EQ(hotkey->default_binding, nullptr);
+	EXPECT_NE(hotkey->handler, nullptr);
+}
+
+TEST_F(InputRecordingFileTest, NoStateFormatStoresRawPadsAndAnExplicitOrigin)
+{
+	const std::array<u8, 18> first = {0xff, 0xbf, 0, 255, 64, 192, 0, 0, 0, 0, 0, 0, 255};
+	const std::array<u8, 18> second = {0xff, 0xff, 127, 127, 127, 127};
+	InputRecordingFile recording;
+	ASSERT_TRUE(recording.openNew(m_path, InputRecordingFile::StartType::None));
+	ASSERT_TRUE(recording.writeHeader());
+	ASSERT_TRUE(recording.writePadData(0, PadData(0, 0, first)));
+	ASSERT_TRUE(recording.writePadData(0, PadData(1, 0, second)));
+	ASSERT_TRUE(recording.writePadData(1, PadData(0, 0, second)));
+	ASSERT_TRUE(recording.writePadData(1, PadData(1, 0, first)));
+	recording.setTotalFrames(2);
+	ASSERT_TRUE(recording.close());
+
+	const auto bytes = FileSystem::ReadBinaryFile(m_path.c_str());
+	ASSERT_TRUE(bytes);
+	ASSERT_EQ(bytes->size(), 570u + 2u * 36u);
+	EXPECT_EQ((*bytes)[0], 2); // Version 2.
+	EXPECT_EQ((*bytes)[561], 2); // Little-endian sample count.
+	EXPECT_EQ((*bytes)[562], 0);
+	EXPECT_EQ((*bytes)[565], 0); // Undo count.
+	EXPECT_EQ((*bytes)[569], 2); // No starting state.
+	EXPECT_FALSE(std::filesystem::exists(m_path + "_SaveState"));
+
+	ASSERT_TRUE(recording.openExisting(m_path));
+	EXPECT_FALSE(recording.hasStartingState());
+	EXPECT_FALSE(recording.fromSaveState());
+	EXPECT_EQ(recording.getTotalFrames(), 2);
+	const auto port0 = recording.readPadData(0, 0, 0);
+	const auto port1 = recording.readPadData(1, 1, 0);
+	ASSERT_TRUE(port0);
+	ASSERT_TRUE(port1);
+	EXPECT_EQ(port0->ToArray(), first);
+	EXPECT_EQ(port1->ToArray(), first);
+	EXPECT_FALSE(recording.readPadData(2, 0, 0));
+	EXPECT_FALSE(recording.readPadData(0, 2, 0));
+	EXPECT_FALSE(recording.readPadData(0, 0, 1));
+}
+
+TEST_F(InputRecordingFileTest, RefusesNoStateReplayBeforeResetOrSavestateLoading)
+{
+	InputRecordingFile recording;
+	ASSERT_TRUE(recording.openNew(m_path, InputRecordingFile::StartType::None));
+	ASSERT_TRUE(recording.writeHeader());
+	ASSERT_TRUE(recording.close());
+	for (bool capture_markers : {false, true})
+	{
+		InputRecording playback;
+		EXPECT_FALSE(playback.play(m_path, capture_markers));
+		EXPECT_FALSE(playback.isActive());
+		EXPECT_FALSE(playback.isCapturingVideo());
+	}
+	InputRecording playback;
+	EXPECT_FALSE(playback.play(m_path, false, {}, InputRecordingCaptureMode::Full, {}, "capture.mkv", InputRecordingVideoFrameRange{0, 0}));
+	EXPECT_FALSE(playback.isActive());
+}
+
+TEST_F(InputRecordingFileTest, PreservesVersionOnePowerOnAndSavestateMarkers)
+{
+	for (bool from_state : {false, true})
+	{
+		InputRecordingFile recording;
+		ASSERT_TRUE(recording.openNew(m_path, from_state));
+		ASSERT_TRUE(recording.writeHeader());
+		ASSERT_TRUE(recording.close());
+		const auto bytes = FileSystem::ReadBinaryFile(m_path.c_str());
+		ASSERT_TRUE(bytes);
+		ASSERT_EQ(bytes->size(), 570u);
+		EXPECT_EQ((*bytes)[0], 1);
+		EXPECT_EQ((*bytes)[569], from_state ? 1 : 0);
+		ASSERT_TRUE(recording.openExisting(m_path));
+		EXPECT_TRUE(recording.hasStartingState());
+		EXPECT_EQ(recording.fromSaveState(), from_state);
+	}
+}
+
+TEST_F(InputRecordingFileTest, RejectsUnknownOriginMarkersAndTruncatedSamples)
+{
+	InputRecordingFile recording;
+	ASSERT_TRUE(recording.openNew(m_path, InputRecordingFile::StartType::None));
+	ASSERT_TRUE(recording.writeHeader());
+	ASSERT_TRUE(recording.close());
+	auto bytes = FileSystem::ReadBinaryFile(m_path.c_str());
+	ASSERT_TRUE(bytes);
+	(*bytes)[569] = 3;
+	ASSERT_TRUE(FileSystem::WriteBinaryFile(m_path.c_str(), bytes->data(), bytes->size()));
+	EXPECT_FALSE(recording.openExisting(m_path));
+	(*bytes)[569] = 2;
+	(*bytes)[0] = 1; // The old boolean must never be interpreted as a no-state marker.
+	ASSERT_TRUE(FileSystem::WriteBinaryFile(m_path.c_str(), bytes->data(), bytes->size()));
+	EXPECT_FALSE(recording.openExisting(m_path));
+	(*bytes)[0] = 2;
+	bytes->push_back(0xff); // One byte cannot constitute an 18-byte pad sample.
+	ASSERT_TRUE(FileSystem::WriteBinaryFile(m_path.c_str(), bytes->data(), bytes->size()));
+	ASSERT_TRUE(recording.openExisting(m_path));
+	EXPECT_FALSE(recording.readPadData(0, 0, 0));
 }
 
 TEST_F(InputRecordingFileTest, RejectsInvalidVideoCaptureBeforeStartingVM)

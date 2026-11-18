@@ -59,6 +59,11 @@ void InputRecordingControls::setRecordMode(bool waitForFrameToEnd)
 
 void InputRecordingControls::setReplayMode(bool waitForFrameToEnd)
 {
+	if (g_InputRecording.isInputOnly())
+	{
+		InputRec::log(TRANSLATE("InputRecordingControls", "This input recording has no starting state and cannot be replayed."), Host::OSD_ERROR_DURATION);
+		return;
+	}
 	if (!waitForFrameToEnd || VMManager::GetState() == VMState::Paused)
 	{
 		m_state = Mode::Replaying;

@@ -55,11 +55,12 @@ bool InputRecordingFile::close() noexcept
 	{
 		return false;
 	}
-	fclose(m_recordingFile);
+	const bool okay = !ferror(m_recordingFile);
+	const int result = fclose(m_recordingFile);
 	m_recordingFile = nullptr;
 	m_writable = false;
 	m_filename.clear();
-	return true;
+	return okay && result == 0;
 }
 
 const std::string& InputRecordingFile::getFilename() const noexcept
@@ -79,7 +80,7 @@ u32 InputRecordingFile::getUndoCount() const noexcept
 
 bool InputRecordingFile::fromSaveState() const noexcept
 {
-	return m_savestate;
+	return m_start_type == StartType::SaveState;
 }
 
 void InputRecordingFile::incrementUndoCount()
@@ -97,6 +98,11 @@ void InputRecordingFile::incrementUndoCount()
 
 bool InputRecordingFile::openNew(const std::string& path, bool fromSavestate)
 {
+	return openNew(path, fromSavestate ? StartType::SaveState : StartType::PowerOn);
+}
+
+bool InputRecordingFile::openNew(const std::string& path, StartType start_type)
+{
 	if ((m_recordingFile = FileSystem::OpenCFile(path.data(), "wb+")) == nullptr)
 	{
 		InputRec::consoleLog(fmt::format("Input recording file opening failed. Error - {}", strerror(errno)));
@@ -107,8 +113,10 @@ bool InputRecordingFile::openNew(const std::string& path, bool fromSavestate)
 	m_writable = true;
 	m_totalFrames = 0;
 	m_undoCount = 0;
+	m_header = {};
 	m_header.init();
-	m_savestate = fromSavestate;
+	m_header.m_fileVersion = start_type == StartType::None ? 2 : 1;
+	m_start_type = start_type;
 	InputRecording::InformGSThread();
 	return true;
 }
@@ -137,7 +145,7 @@ bool InputRecordingFile::openExisting(const std::string& path)
 
 std::optional<PadData> InputRecordingFile::readPadData(const uint frame, const uint port, const uint slot)
 {
-	if (m_recordingFile == nullptr)
+	if (m_recordingFile == nullptr || port >= s_controllerPortsSupported || slot != 0)
 	{
 		return std::nullopt;
 	}
@@ -146,12 +154,12 @@ std::optional<PadData> InputRecordingFile::readPadData(const uint frame, const u
 
 	// TODO - slot unused, use it in the new format
 	const size_t seek = getRecordingBlockSeekPoint(frame) + s_controllerInputBytes * port;
-	if (fseek(m_recordingFile, seek, SEEK_SET) != 0 || fread(&data, 1, 18, m_recordingFile) != 1)
+	if (fseek(m_recordingFile, seek, SEEK_SET) != 0 || fread(data.data(), 1, data.size(), m_recordingFile) != data.size())
 	{
-		return PadData(port, slot, data);
+		return std::nullopt;
 	}
 
-	return std::nullopt;
+	return PadData(port, slot, data);
 }
 
 void InputRecordingFile::setTotalFrames(u32 frame)
@@ -176,7 +184,7 @@ bool InputRecordingFile::writeHeader() const
 	if (fwrite(&m_header, sizeof(InputRecordingFileHeader), 1, m_recordingFile) != 1 ||
 		fwrite(&m_totalFrames, 4, 1, m_recordingFile) != 1 ||
 		fwrite(&m_undoCount, 4, 1, m_recordingFile) != 1 ||
-		fwrite(&m_savestate, 1, 1, m_recordingFile) != 1)
+		fwrite(&m_start_type, 1, 1, m_recordingFile) != 1)
 	{
 		return false;
 	}
@@ -255,7 +263,7 @@ std::vector<PadData> InputRecordingFile::bulkReadPadData(u32 frameStart, u32 fra
 
 size_t InputRecordingFile::getRecordingBlockSeekPoint(const u32 frame) const noexcept
 {
-	return s_headerSize + sizeof(bool) + frame * s_inputBytesPerFrame;
+	return s_headerSize + sizeof(StartType) + static_cast<size_t>(frame) * s_inputBytesPerFrame;
 }
 
 bool InputRecordingFile::verifyRecordingFileHeader()
@@ -269,15 +277,20 @@ bool InputRecordingFile::verifyRecordingFileHeader()
 	if (fread(&m_header, sizeof(InputRecordingFileHeader), 1, m_recordingFile) != 1 ||
 		fread(&m_totalFrames, 4, 1, m_recordingFile) != 1 ||
 		fread(&m_undoCount, 4, 1, m_recordingFile) != 1 ||
-		fread(&m_savestate, sizeof(bool), 1, m_recordingFile) != 1)
+		fread(&m_start_type, sizeof(StartType), 1, m_recordingFile) != 1)
 	{
 		return false;
 	}
 
-	// Check for current verison
-	if (m_header.m_fileVersion != 1)
+	if (m_header.m_fileVersion != 1 && m_header.m_fileVersion != 2)
 	{
 		InputRec::consoleLog(fmt::format("Input recording file is not a supported version - {}", m_header.m_fileVersion));
+		return false;
+	}
+	if (static_cast<u8>(m_start_type) > static_cast<u8>(StartType::None) ||
+		(m_header.m_fileVersion == 1 && m_start_type == StartType::None))
+	{
+		InputRec::consoleLog("Input recording has an invalid starting-state type");
 		return false;
 	}
 	return true;

@@ -125,6 +125,17 @@ namespace CaptureScript
 							}
 						}
 					}
+					else if (command == "sticks")
+					{
+						statement.type = Statement::Type::Sticks;
+						for (u8& axis : statement.sticks)
+						{
+							u64 value;
+							if (!Number(value) || value > 255)
+								return Error("sticks requires four axis values in 0..255 (right X/Y, left X/Y)");
+							axis = static_cast<u8>(value);
+						}
+					}
 					else if (command == "capture")
 					{
 						statement.type = Statement::Type::Capture;
@@ -153,7 +164,7 @@ namespace CaptureScript
 					}
 					else
 					{
-						return Error("expected wait, run, hold, capture, or stop");
+						return Error("expected wait, run, hold, sticks, capture, or stop");
 					}
 					result.push_back(std::move(statement));
 					if (!AtEnd() && !Take(";"))
@@ -346,6 +357,9 @@ namespace CaptureScript
 					break;
 				case Statement::Type::Hold:
 					m_buttons = statement.buttons;
+					break;
+				case Statement::Type::Sticks:
+					m_sticks = statement.sticks;
 					break;
 				case Statement::Type::Capture:
 					if (!capture(statement.path))

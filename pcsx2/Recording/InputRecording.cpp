@@ -19,6 +19,7 @@ bool SaveStateBase::InputRecordingFreeze()
 #include "InputRecording.h"
 
 #include "InputRecordingControls.h"
+#include "CaptureScript.h"
 #include "Utilities/InputRecordingLogger.h"
 
 #include "common/Error.h"
@@ -35,6 +36,7 @@ bool SaveStateBase::InputRecordingFreeze()
 #include "DebugTools/Debug.h"
 #include "GameDatabase.h"
 #include "fmt/format.h"
+#include "fmt/chrono.h"
 #include "GS.h"
 #include "GS/GSCapture.h"
 #include "Host.h"
@@ -42,6 +44,7 @@ bool SaveStateBase::InputRecordingFreeze()
 #include <algorithm>
 #include <charconv>
 #include <limits>
+#include <ctime>
 
 std::optional<InputRecordingCaptureMode> ParseInputRecordingCaptureMode(const std::string_view value)
 {
@@ -257,6 +260,70 @@ bool InputRecording::create(const std::string& fileName, const bool fromSaveStat
 	return true;
 }
 
+void InputRecording::toggleInputRecording()
+{
+	if (!VMManager::HasValidVM())
+		return;
+	if (isInputOnly())
+	{
+		closeActiveFile();
+		return;
+	}
+	if (m_is_active || CaptureScript::Runtime::IsActive())
+	{
+		InputRec::log(TRANSLATE_STR("InputRecording", "Stop the active recording, replay, or capture script first."), Host::OSD_ERROR_DURATION);
+		return;
+	}
+	std::string title = Path::SanitizeFileName(VMManager::GetTitle(false));
+	if (title.empty())
+		title = "input-recording";
+	const std::time_t now = std::time(nullptr);
+	std::tm local_time{};
+#ifdef _WIN32
+	localtime_s(&local_time, &now);
+#else
+	localtime_r(&now, &local_time);
+#endif
+	const std::string base = fmt::format("{} - {:%Y-%m-%d %H.%M.%S}", title, local_time);
+	std::string filename = Path::Combine(EmuFolders::InputRecordings, base + ".p2m2");
+	for (u32 suffix = 2; FileSystem::FileExists(filename.c_str()); suffix++)
+		filename = Path::Combine(EmuFolders::InputRecordings, fmt::format("{} ({}).p2m2", base, suffix));
+	if (!createInputOnly(filename))
+		InputRec::log(TRANSLATE_STR("InputRecording", "Failed to start input recording."), Host::OSD_ERROR_DURATION);
+}
+
+bool InputRecording::createInputOnly(const std::string& filename)
+{
+	// Start at the input poll's current frame, without resetting; hotkey boundary timing needs proper runtime testing.
+	if (!m_file.openNew(filename, InputRecordingFile::StartType::None))
+		return false;
+	m_file.setEmulatorVersion();
+	m_file.setAuthor({});
+	m_file.setGameName(VMManager::GetTitle(false));
+	if (!m_file.writeHeader())
+	{
+		m_file.close();
+		return false;
+	}
+	m_type = Type::NO_STATE;
+	m_initial_load_complete = true;
+	m_starting_frame = g_FrameCount;
+	m_frame_counter_stateless = 0;
+	m_capture_markers = false;
+	m_capture_marker_down = false;
+	m_exit_on_replay_completion = false;
+	m_video_frames.reset();
+	m_video_audio.clear();
+	m_video_started = false;
+	m_controls.processControlQueue();
+	m_is_active = true;
+	m_controls.setRecordModeEnabled(true);
+	m_controls.setRecordMode(false);
+	initializeState();
+	InputRec::log(TRANSLATE_STR("InputRecording", "Recording input"), Host::OSD_INFO_DURATION);
+	return true;
+}
+
 bool InputRecording::play(const std::string& filename, bool capture_markers, const std::string& capture_directory,
 	const InputRecordingCaptureMode capture_mode, const InputRecordingCaptureMarkerRanges& capture_marker_ranges,
 	const std::string& video_path, std::optional<InputRecordingVideoFrameRange> video_frames)
@@ -274,6 +341,12 @@ bool InputRecording::play(const std::string& filename, bool capture_markers, con
 	m_controls.setRecordModeEnabled(false);
 	if (!m_file.openExisting(filename))
 	{
+		return false;
+	}
+	if (!m_file.hasStartingState())
+	{
+		InputRec::log(TRANSLATE_STR("InputRecording", "This input recording has no starting state and cannot be replayed."), Host::OSD_ERROR_DURATION);
+		m_file.close();
 		return false;
 	}
 	if (video_path.empty() != !video_frames.has_value() ||
@@ -383,12 +456,19 @@ void InputRecording::closeActiveFile()
 	}
 	m_video_frames.reset();
 	m_video_audio.clear();
-	if (m_file.close())
+	const bool input_only = isInputOnly();
+	const std::string filename = m_file.getFilename();
+	const bool saved = m_file.close();
+	m_is_active = false;
+	m_capture_markers = false;
+	m_capture_marker_down = false;
+	InformGSThread();
+	if (saved)
 	{
-		m_is_active = false;
-		m_capture_markers = false;
-		m_capture_marker_down = false;
-		InputRec::log(TRANSLATE_STR("InputRecording", "Input recording stopped"), Host::OSD_ERROR_DURATION);
+		if (input_only)
+			InputRec::log(fmt::format(TRANSLATE_FS("InputRecording", "Saved input recording: {}"), Path::GetFileName(filename)), Host::OSD_INFO_DURATION);
+		else
+			InputRec::log(TRANSLATE_STR("InputRecording", "Input recording stopped"), Host::OSD_ERROR_DURATION);
 		MTGS::PresentCurrentFrame();
 	}
 	else
@@ -399,7 +479,7 @@ void InputRecording::closeActiveFile()
 
 void InputRecording::stop()
 {
-	if (VMManager::GetState() == VMState::Paused)
+	if (VMManager::GetState() == VMState::Paused || isInputOnly())
 	{
 		closeActiveFile();
 	}
@@ -414,6 +494,11 @@ void InputRecording::stop()
 
 void InputRecording::handleControllerDataUpdate()
 {
+	if (isInputOnly() && m_frame_counter == std::numeric_limits<u32>::max())
+	{
+		closeActiveFile();
+		return;
+	}
 	bool capture_marker_down = false;
 
 	// TODO - multi-tap support with new file format, for now just controller 0 and 1
@@ -446,6 +531,13 @@ void InputRecording::handleControllerDataUpdate()
 		if (capture_marker_down && !m_capture_marker_down)
 			captureReplayMarker();
 		m_capture_marker_down = capture_marker_down;
+	}
+	if (isInputOnly())
+	{
+		// No-state logs are contiguous samples, independent of resets or state-load frame counters.
+		m_frame_counter++;
+		m_frame_counter_stateless = m_frame_counter;
+		m_file.setTotalFrames(m_frame_counter);
 	}
 }
 
@@ -573,7 +665,7 @@ void InputRecording::finishVideoFrame()
 
 void InputRecording::incFrameCounter()
 {
-	if (!m_is_active)
+	if (!m_is_active || isInputOnly())
 	{
 		return;
 	}
@@ -660,6 +752,8 @@ void InputRecording::handleExceededFrameCounter()
 
 void InputRecording::handleReset()
 {
+	if (isInputOnly())
+		return;
 	m_video_audio.clear();
 	if (m_initial_load_complete)
 	{
@@ -670,6 +764,8 @@ void InputRecording::handleReset()
 
 void InputRecording::handleLoadingSavestate()
 {
+	if (isInputOnly())
+		return;
 	// We need to keep track of the starting internal frame of the recording
 	// - For a power-on recording this should already be done - it starts at 0
 	// - For save state recordings, this is stored inside the initial save-state
@@ -764,12 +860,14 @@ void InputRecording::initializeState()
 
 void InputRecording::InformGSThread()
 {
+	const bool input_only = g_InputRecording.isInputOnly();
 	TinyString recording_active_message = TinyString::from_format(TRANSLATE_FS("InputRecording", "Input Recording Active: {}"), g_InputRecording.getData().getFilename());
 	TinyString frame_data_message = TinyString::from_format(TRANSLATE_FS("InputRecording", "Frame: {}/{} ({})"), g_InputRecording.getFrameCounter(), g_InputRecording.getData().getTotalFrames(), g_InputRecording.getFrameCounterStateless());
 	TinyString undo_count_message = TinyString::from_format(TRANSLATE_FS("InputRecording", "Undo Count: {}"), g_InputRecording.getData().getUndoCount());
 
-	MTGS::RunOnGSThread([recording_active_message, frame_data_message, undo_count_message](bool is_recording = g_InputRecording.getControls().isRecording()) {
+	MTGS::RunOnGSThread([recording_active_message, frame_data_message, undo_count_message, input_only](bool is_recording = g_InputRecording.getControls().isRecording()) {
 		g_InputRecordingData.is_recording = is_recording;
+		g_InputRecordingData.is_input_only = input_only;
 		g_InputRecordingData.recording_active_message = recording_active_message;
 		g_InputRecordingData.frame_data_message = frame_data_message;
 		g_InputRecordingData.undo_count_message = undo_count_message;

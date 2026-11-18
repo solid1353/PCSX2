@@ -1230,7 +1230,7 @@ __ri void ImGuiManager::DrawInputsOverlay(float scale, float margin, float spaci
 
 __ri void ImGuiManager::DrawInputRecordingOverlay(float& position_y, float scale, float margin, float spacing)
 {
-	if (!GSConfig.OsdShowInputRec ||
+	if ((!GSConfig.OsdShowInputRec && !g_InputRecordingData.is_input_only) ||
 		!g_InputRecording.isActive() ||
 		FullscreenUI::HasActiveWindow())
 		return;
@@ -1255,6 +1255,12 @@ __ri void ImGuiManager::DrawInputRecordingOverlay(float& position_y, float scale
 		dl->AddText(font, size, ImVec2(GetWindowWidth() - margin - text_size.x, position_y), color, (text)); \
 		position_y += text_size.y + spacing; \
 	} while (0)
+
+	if (g_InputRecordingData.is_input_only)
+	{
+		DRAW_LINE(osd_font, font_size, TRANSLATE("ImGuiOverlays", "Recording input"), IM_COL32(255, 0, 0, 255));
+		return;
+	}
 
 	// Status Indicators
 	if (g_InputRecordingData.is_recording)

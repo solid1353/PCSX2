@@ -46,6 +46,7 @@ namespace InputRecordingUI
 	struct InputRecordingData
 	{
 		bool is_recording = false;
+		bool is_input_only = false;
 		TinyString recording_active_message = "";
 		TinyString frame_data_message = "";
 		TinyString undo_count_message = "";

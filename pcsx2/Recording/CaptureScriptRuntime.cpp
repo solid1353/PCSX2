@@ -15,6 +15,7 @@
 #include "common/Path.h"
 
 #include <array>
+#include <algorithm>
 
 namespace CaptureScript::Runtime
 {
@@ -114,8 +115,10 @@ namespace CaptureScript::Runtime
 	{
 		if (!s_runner)
 			return;
-		// Full-pressure digital buttons and centered sticks, using the replay pad format.
+		// Full-pressure digital buttons and raw stick bytes, using the replay pad format.
 		std::array<u8, 18> state = {0xff, 0xff, 127, 127, 127, 127};
+		const auto& sticks = s_runner->GetSticks();
+		std::copy(sticks.begin(), sticks.end(), state.begin() + 2);
 		const u16 buttons = s_runner->GetButtons();
 		state[0] = static_cast<u8>(~buttons);
 		state[1] = static_cast<u8>(~(buttons >> 8));

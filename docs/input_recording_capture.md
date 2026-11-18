@@ -15,6 +15,60 @@ are not searched. PCSX2 does not create missing parent directories.
 A recording that starts from a savestate keeps that savestate in the
 directory `<recording>_SaveState` next to the recording.
 
+## Recording from the current frame
+
+Bind **Toggle Input Recording** in Hotkey Settings → System. It has no
+default binding. With a game running and no recording or replay active,
+it starts logging the current pad input without resetting the VM or saving
+a state. Recording tools need not be enabled. The screen shows **Recording
+input** throughout the recording, even when the ordinary input recording
+overlay setting is off.
+
+Press it again to close the file. The saved-file message names
+`<game> - YYYY-MM-DD HH.MM.SS.p2m2` in the configured primary
+`InputRecordings` folder. If that name already exists, a numbered suffix
+is added. Both pad ports are sampled once per input frame; resets and
+state loads do not rewind this log. Other recording or replay sessions
+must be stopped before starting one, and capture scripts cannot accompany it.
+
+These files contain input only, with no starting state. PCSX2 refuses to
+replay them with **This input recording has no starting state and cannot
+be replayed.** They are intended for reading the captured input and copying
+it into a [capture script](capture_script.md).
+
+## Recording file format
+
+All multi-byte integers are little-endian. The fixed header occupies 570
+bytes. Text fields are NUL-terminated byte arrays.
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 1 | Format version: 1 for existing power-on/savestate recordings; 2 for input-only recordings. |
+| 1 | 50 | Emulator version. |
+| 51 | 255 | Author. |
+| 306 | 255 | Game name. |
+| 561 | 4 | Total frames. For input-only recordings this is the number of stored frames, indexed 0 through count−1. |
+| 565 | 4 | Undo count; zero for input-only recordings. |
+| 569 | 1 | Starting-state type: 0 = power-on, 1 = companion savestate, 2 = no starting state. Value 2 requires version 2. |
+| 570 | 36 per frame | Two consecutive 18-byte pad samples, port 0 then port 1. |
+
+A reader identifies an input-only recording by **version 2 at byte 0 and
+starting-state type 2 at byte 569**. It can read every pad frame without any
+game state. Existing version-1 fields, offsets, and pad data remain unchanged;
+for their total frame counter semantics, see [frame-exact video](#frame-exact-video).
+
+Each 18-byte pad sample contains:
+
+| Bytes | Meaning |
+| --- | --- |
+| 0 | Active-low button bits 0–7: select, L3, R3, start, up, right, down, left. |
+| 1 | Active-low button bits 0–7: L2, R2, L1, R1, triangle, circle, cross, square. |
+| 2–5 | Raw unsigned stick axes: right X, right Y, left X, left Y; 0–255 with center 127. |
+| 6–17 | Pressure bytes 0–255: right, left, up, down, triangle, circle, cross, square, L1, R1, L2, R2. |
+
+Copy pad bytes 2–5 directly into `sticks <rx> <ry> <lx> <ly>` in a capture
+script. Each following frame begins 36 bytes after the previous frame.
+
 ## Read-only playback
 
 Every replay, from the command line or the menu, opens the recording
@@ -158,5 +212,9 @@ it with the other state files.
   plus rejection of invalid capture options and savestate recordings before boot,
   and internal capture resolution selection independent of desktop capture
   settings.
+- The same tests cover the input-only format marker, raw pad round trips,
+  rejection of input-only replay, invalid origin markers, and truncated samples.
+- `tests/ctest/core/capture_script_tests.cpp` covers raw stick values, axis
+  order, validation, persistence, and frame boundaries independently of buttons.
 - `tests/ctest/core/patch_tests.cpp` (`InputRecordingPath` tests) covers exact
   absolute paths and relative paths below the primary folder.

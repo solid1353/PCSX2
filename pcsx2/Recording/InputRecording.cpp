@@ -757,7 +757,22 @@ void InputRecording::handleReset()
 	m_video_audio.clear();
 	if (m_initial_load_complete)
 	{
-		adjustFrameCounterOnReRecord(0);
+		if (m_is_active && m_type == Type::POWER_ON && m_controls.isRecording())
+		{
+			if (!m_file.restartPowerOnRecording())
+			{
+				closeActiveFile();
+				InputRec::log(TRANSLATE_STR("InputRecording", "Failed to restart input recording; recording stopped."), Host::OSD_ERROR_DURATION);
+				return;
+			}
+			m_frame_counter_stateless = 0;
+			initializeState();
+			InputRec::log(TRANSLATE_STR("InputRecording", "Input recording restarted from power-on."), Host::OSD_INFO_DURATION);
+		}
+		else
+		{
+			adjustFrameCounterOnReRecord(0);
+		}
 	}
 	m_initial_load_complete = true;
 }

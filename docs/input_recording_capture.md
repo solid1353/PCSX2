@@ -15,6 +15,14 @@ are not searched. PCSX2 does not create missing parent directories.
 A recording that starts from a savestate keeps that savestate in the
 directory `<recording>_SaveState` next to the recording.
 
+During a power-on recording, **System → Restart** starts that recording over
+from power-on in the same file, still in record mode. Both frame counters,
+the total frame count, and the undo count return to zero, and all previously
+recorded pad samples are removed. The file keeps its game, author, and
+emulator metadata and contains only the run after the last restart, even
+when that run is shorter. A reset during playback keeps the existing replay
+behavior. Savestate-based recordings and input-only recordings are unchanged.
+
 ## Recording from the current frame
 
 Bind **Toggle Input Recording** in Hotkey Settings → System. It has no
@@ -214,6 +222,8 @@ it with the other state files.
   settings.
 - The same tests cover the input-only format marker, raw pad round trips,
   rejection of input-only replay, invalid origin markers, and truncated samples.
+  They also cover power-on recording restarts, removal of old samples and
+  counters, shorter replacement runs, and unchanged playback/input-only resets.
 - `tests/ctest/core/capture_script_tests.cpp` covers raw stick values, axis
   order, validation, persistence, and frame boundaries independently of buttons.
 - `tests/ctest/core/patch_tests.cpp` (`InputRecordingPath` tests) covers exact

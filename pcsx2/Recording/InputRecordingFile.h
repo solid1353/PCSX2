@@ -26,6 +26,8 @@ public:
 	};
 
 private:
+	friend class InputRecordingResetTest;
+
 	struct InputRecordingFileHeader
 	{
 		u8 m_fileVersion = 1;
@@ -67,6 +69,8 @@ public:
 	// booting the game
 	bool openNew(const std::string& path, bool fromSaveState);
 	bool openNew(const std::string& path, StartType start_type);
+	// Discard all samples and counters while preserving a power-on recording's metadata.
+	bool restartPowerOnRecording();
 	// Reads the current frame's input data from the file in order to intercept and overwrite
 	// the current frame's value from the emulator
 	std::optional<PadData> readPadData(const uint frame, const uint port, const uint slot);

@@ -78,6 +78,8 @@ public:
 	const InputRecordingFile& getData() const;
 
 private:
+	friend class InputRecordingResetTest;
+
 	InputRecordingControls m_controls;
 	InputRecordingFile m_file;
 

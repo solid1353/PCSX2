@@ -12,10 +12,12 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <filesystem>
 #include <tuple>
+#include <vector>
 
 namespace
 {
@@ -60,6 +62,177 @@ namespace
 		std::string m_path;
 	};
 } // namespace
+
+// Seed recording state directly so reset tests never boot or run a VM.
+class InputRecordingResetTest : public InputRecordingFileTest
+{
+protected:
+	void Prepare(InputRecording::Type type, bool replay = false, bool initial_load_complete = true)
+	{
+		const auto start_type = type == InputRecording::Type::POWER_ON       ? InputRecordingFile::StartType::PowerOn :
+		                        type == InputRecording::Type::FROM_SAVESTATE ? InputRecordingFile::StartType::SaveState :
+		                                                                       InputRecordingFile::StartType::None;
+		ASSERT_TRUE(m_recording.m_file.openNew(m_path, start_type));
+		m_recording.m_file.setAuthor("Test author");
+		m_recording.m_file.setGameName("Test game");
+		m_recording.m_file.setEmulatorVersion();
+		ASSERT_TRUE(m_recording.m_file.writeHeader());
+		for (u32 frame = 0; frame <= 8; frame++)
+		{
+			for (u8 port = 0; port < 2; port++)
+				ASSERT_TRUE(m_recording.m_file.writePadData(frame, PadData(port, 0, std::array<u8, 18>{0xaa, 0xbb})));
+		}
+		m_recording.m_file.setTotalFrames(8);
+		m_recording.m_file.incrementUndoCount();
+		// Flush the updated counters through the normal sample writer.
+		ASSERT_TRUE(m_recording.m_file.writePadData(8, PadData(1, 0, std::array<u8, 18>{0xaa, 0xbb})));
+		const auto before = Snapshot();
+		ASSERT_TRUE(before);
+		m_before = before.value();
+		m_recording.m_type = type;
+		m_recording.m_is_active = true;
+		m_recording.m_initial_load_complete = initial_load_complete;
+		m_recording.m_frame_counter = 8;
+		m_recording.m_frame_counter_stateless = 12;
+		m_recording.m_starting_frame = type == InputRecording::Type::FROM_SAVESTATE ? 100 : 0;
+		m_recording.m_watching_for_rerecords = true;
+		m_recording.m_controls.setRecordModeEnabled(!replay);
+		if (!replay)
+			m_recording.m_controls.setRecordMode(false);
+		if (replay)
+		{
+			ASSERT_TRUE(m_recording.m_file.close());
+			ASSERT_TRUE(m_recording.m_file.openExisting(m_path));
+		}
+	}
+
+	void TearDown() override
+	{
+		m_recording.m_file.close();
+		InputRecordingFileTest::TearDown();
+	}
+
+	bool IsWatchingForRerecords() const { return m_recording.m_watching_for_rerecords; }
+	bool CloseFile() { return m_recording.m_file.close(); }
+	s64 FileSize() const { return FileSystem::FSize64(m_recording.m_file.m_recordingFile); }
+	std::optional<std::vector<u8>> Snapshot() const
+	{
+		// Use the writer's handle: Windows does not permit a second open here.
+		return FileSystem::ReadBinaryFile(m_recording.m_file.m_recordingFile);
+	}
+
+	InputRecording m_recording;
+	std::vector<u8> m_before;
+};
+
+TEST_F(InputRecordingResetTest, RestartDiscardsOldRunAndKeepsRecording)
+{
+	Prepare(InputRecording::Type::POWER_ON);
+	ASSERT_FALSE(HasFatalFailure());
+	m_recording.handleReset();
+	EXPECT_TRUE(m_recording.isActive());
+	EXPECT_TRUE(m_recording.getControls().isRecording());
+	EXPECT_EQ(m_recording.getFrameCounter(), 0u);
+	EXPECT_EQ(m_recording.getFrameCounterStateless(), 0u);
+	EXPECT_EQ(m_recording.getData().getTotalFrames(), 0u);
+	EXPECT_EQ(m_recording.getData().getUndoCount(), 0u);
+	EXPECT_FALSE(IsWatchingForRerecords());
+	EXPECT_EQ(FileSize(), 570);
+	const auto header = Snapshot();
+	ASSERT_TRUE(header);
+	ASSERT_EQ(header->size(), 570u);
+	EXPECT_TRUE(std::equal(header->begin(), header->begin() + 561, m_before.begin()));
+	EXPECT_EQ(header->at(569), 0);
+
+	const std::array<u8, 18> new_input = {0xff, 0xff, 127, 127, 0, 255};
+	for (u32 frame = 1; frame <= 2; frame++)
+	{
+		m_recording.incFrameCounter();
+		for (int port = 0; port < 2; port++)
+			m_recording.saveControllerData(PadData(port, 0, new_input), port, 0);
+	}
+	ASSERT_TRUE(CloseFile());
+	EXPECT_EQ(FileSystem::GetPathFileSize(m_path.c_str()), 570 + 3 * 36);
+	InputRecordingFile saved;
+	ASSERT_TRUE(saved.openExisting(m_path));
+	EXPECT_EQ(saved.getTotalFrames(), 2u);
+	EXPECT_EQ(saved.getUndoCount(), 0u);
+	for (u32 frame = 1; frame <= 2; frame++)
+	{
+		for (uint port = 0; port < 2; port++)
+		{
+			const auto pad = saved.readPadData(frame, port, 0);
+			ASSERT_TRUE(pad);
+			EXPECT_EQ(pad->ToArray(), new_input);
+		}
+	}
+	EXPECT_FALSE(saved.readPadData(3, 0, 0));
+}
+
+TEST_F(InputRecordingResetTest, RepeatedRestartDropsEachPreviousRun)
+{
+	Prepare(InputRecording::Type::POWER_ON);
+	ASSERT_FALSE(HasFatalFailure());
+	for (int restart = 0; restart < 3; restart++)
+	{
+		m_recording.handleReset();
+		EXPECT_TRUE(m_recording.getControls().isRecording());
+		EXPECT_EQ(m_recording.getFrameCounter(), 0u);
+		EXPECT_EQ(m_recording.getFrameCounterStateless(), 0u);
+		EXPECT_EQ(FileSize(), 570);
+		m_recording.incFrameCounter();
+		m_recording.saveControllerData(PadData(0, 0, std::array<u8, 18>{}), 0, 0);
+	}
+}
+
+TEST_F(InputRecordingResetTest, PlaybackResetPreservesFileAndReplayMode)
+{
+	Prepare(InputRecording::Type::POWER_ON, true);
+	ASSERT_FALSE(HasFatalFailure());
+	m_recording.handleReset();
+	m_recording.getControls().processControlQueue();
+	EXPECT_TRUE(m_recording.getControls().isReplaying());
+	EXPECT_EQ(m_recording.getFrameCounter(), 0u);
+	EXPECT_EQ(m_recording.getData().getTotalFrames(), 8u);
+	ASSERT_TRUE(CloseFile());
+	EXPECT_EQ(FileSystem::ReadBinaryFile(m_path.c_str()).value(), m_before);
+}
+
+TEST_F(InputRecordingResetTest, InputOnlyResetPreservesSamplesAndCounters)
+{
+	Prepare(InputRecording::Type::NO_STATE);
+	ASSERT_FALSE(HasFatalFailure());
+	m_recording.handleReset();
+	EXPECT_TRUE(m_recording.isInputOnly());
+	EXPECT_TRUE(m_recording.getControls().isRecording());
+	EXPECT_EQ(m_recording.getFrameCounter(), 8u);
+	EXPECT_EQ(m_recording.getFrameCounterStateless(), 12u);
+	ASSERT_TRUE(CloseFile());
+	EXPECT_EQ(FileSystem::ReadBinaryFile(m_path.c_str()).value(), m_before);
+}
+
+TEST_F(InputRecordingResetTest, SavestateRecordingResetKeepsExistingReplayBehavior)
+{
+	Prepare(InputRecording::Type::FROM_SAVESTATE);
+	ASSERT_FALSE(HasFatalFailure());
+	m_recording.handleReset();
+	m_recording.getControls().processControlQueue();
+	EXPECT_TRUE(m_recording.getControls().isReplaying());
+	EXPECT_EQ(m_recording.getFrameCounter(), 0u);
+	ASSERT_TRUE(CloseFile());
+	EXPECT_EQ(FileSystem::ReadBinaryFile(m_path.c_str()).value(), m_before);
+}
+
+TEST_F(InputRecordingResetTest, InitialBootResetDoesNotRestartTheRecording)
+{
+	Prepare(InputRecording::Type::POWER_ON, false, false);
+	ASSERT_FALSE(HasFatalFailure());
+	m_recording.handleReset();
+	EXPECT_TRUE(m_recording.getControls().isRecording());
+	EXPECT_EQ(m_recording.getFrameCounter(), 8u);
+	ASSERT_TRUE(CloseFile());
+	EXPECT_EQ(FileSystem::ReadBinaryFile(m_path.c_str()).value(), m_before);
+}
 
 TEST_F(InputRecordingResolutionTest, ReplayUsesInternalResolutionRegardlessOfDesktopCaptureSettings)
 {

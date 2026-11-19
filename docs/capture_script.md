@@ -14,6 +14,8 @@ script as one argument, including on macOS. Names are lowercase.
 | Statement | Effect |
 | --- | --- |
 | `wait <condition> within <frames>` | Execute frames and check the condition at each completed VSync. The last allowed frame may satisfy it; otherwise fail at that boundary. Always executes at least one frame. |
+| `wait <read> changes within <frames>` | Snapshot the read when the statement starts, then execute frames until its value differs at a completed VSync. Always executes at least one frame; the last allowed frame may satisfy it, otherwise fail. |
+| `load <path>` | Read and validate a text memory file, then write its bytes to EE RAM before the next interval. Consumes no frames. Relative paths use the working directory. Spaces are accepted; optional double quotes around the path are removed. |
 | `run <frames>` | Execute that many VSync intervals. Zero is allowed. |
 | `hold <buttons>` | Replace pad 0's held buttons for the next interval and all following intervals until another `hold`. |
 | `sticks <rx> <ry> <lx> <ly>` | Replace pad 0's right X/Y and left X/Y stick bytes for the next interval and following intervals until another `sticks`. Each axis is an integer in 0–255, decimal or hexadecimal. |
@@ -64,6 +66,42 @@ are not mapped. Nesting is limited to 64 reads.
 wait [[[0x00607620]+0x34]] != 0 && [[[0x00607620]+0x34]] != 1 && [[[0x00607620]+0x34]] != 6 within 7200
 ```
 
+Change waits accept the same reads, widths, shifts, and masks as comparisons.
+They compare the resulting value against the snapshot taken at the start of
+that statement, including after preceding instant statements. A failed read
+counts as unchanged; if the initial read fails, the wait times out.
+
+```text
+wait [[0x006073FC]+8]>>16&0xff changes within 120
+```
+
+## Loading memory
+
+Each non-empty line of a load file is `<address> <hex bytes>`. Blank lines and
+surrounding whitespace are accepted. The address uses the syntax inside a
+condition read: a decimal or `0x` number, or a nested read, followed by any
+number of `+number` offsets. Hex bytes are one uninterrupted, non-empty string
+of an even number of hexadecimal digits, without a `0x` prefix, written in
+their listed order. For example:
+
+```text
+0x100 1234abcd
+[0x006073FC]+0x10+4 01000000
+```
+
+The whole file is read and validated when `load` executes. Missing or unreadable
+files, malformed lines, odd hex digits, failed pointer reads, address overflow,
+or any write outside exposed EE RAM fail the script and write nothing from
+that file. All pointers resolve against RAM before any writes are applied;
+overlapping writes apply in file order. Literal address zero is valid.
+
+Load the random generator state and update counter at the fight's start, then
+wait for the counter to change before capturing:
+
+```text
+load "fight start.txt"; wait [0x100] changes within 120; capture take.mkv; run 300; stop
+```
+
 ## Capture and completion
 
 Capture uses the same internal render resolution, configured capture
@@ -85,6 +123,6 @@ combined with a capture script.
 Completion logs `Capture script complete: N emulated frames.` and exits zero
 in `-batch` or `-surfaceless` mode. Otherwise the game keeps running with the
 last scripted pad state. Parse errors, wait timeouts, boot errors, capture
-errors, or interruption before completion log an error and exit nonzero.
-The complete script is parsed before boot. Capture startup fails if the first
-selected frame has no valid video mode.
+errors, load errors, or interruption before completion log an error and exit
+nonzero. The complete script is parsed before boot. Capture startup fails if
+the first selected frame has no valid video mode.

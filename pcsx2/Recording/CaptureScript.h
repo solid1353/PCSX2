@@ -35,6 +35,7 @@ namespace CaptureScript
 		std::unique_ptr<Read> pointer;
 		u64 offset = 0;
 		std::vector<Transform> transforms;
+		std::optional<u64> ResolveAddress(std::span<const u8> ram) const;
 		std::optional<s64> Evaluate(std::span<const u8> ram) const;
 	};
 
@@ -62,6 +63,8 @@ namespace CaptureScript
 		enum class Type
 		{
 			Wait,
+			WaitChanges,
+			Load,
 			Run,
 			Hold,
 			Sticks,
@@ -73,6 +76,7 @@ namespace CaptureScript
 		u16 buttons = 0;
 		std::array<u8, 4> sticks = {127, 127, 127, 127}; // Right X/Y, left X/Y, as stored in PadData.
 		Condition condition;
+		Read change_read;
 		std::string path;
 	};
 	using Program = std::vector<Statement>;
@@ -85,8 +89,8 @@ namespace CaptureScript
 		using CaptureAction = std::function<bool(const std::string&)>;
 		using StopAction = std::function<bool()>;
 		explicit Runner(Program program);
-		bool Start(const CaptureAction& capture, const StopAction& stop);
-		bool EndFrame(std::span<const u8> ram, const CaptureAction& capture, const StopAction& stop);
+		bool Start(std::span<u8> ram, const CaptureAction& capture, const StopAction& stop);
+		bool EndFrame(std::span<u8> ram, const CaptureAction& capture, const StopAction& stop);
 		bool IsComplete() const { return m_statement == m_program.size() && m_error.empty(); }
 		bool IsCapturing() const { return m_capturing; }
 		u16 GetButtons() const { return m_buttons; }
@@ -95,12 +99,13 @@ namespace CaptureScript
 		const std::string& GetError() const { return m_error; }
 
 	private:
-		bool Execute(const CaptureAction& capture, const StopAction& stop);
+		bool Execute(std::span<u8> ram, const CaptureAction& capture, const StopAction& stop);
 		bool Fail(std::string_view reason);
 		Program m_program;
 		size_t m_statement = 0;
 		u64 m_frame = 0;
 		u64 m_elapsed = 0;
+		std::optional<s64> m_initial_value;
 		u16 m_buttons = 0;
 		std::array<u8, 4> m_sticks = {127, 127, 127, 127};
 		bool m_capturing = false;

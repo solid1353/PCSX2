@@ -104,7 +104,7 @@ namespace CaptureScript::Runtime
 		s_exit_on_completion = exit_on_completion;
 		s_running = true;
 		Console.WriteLn("Capture script: starting at power-on.");
-		if (!s_runner->Start(ArmCapture, StopCapture))
+		if (!s_runner->Start(std::span<u8>(eeMem->Main, Ps2MemSize::ExposedRam), ArmCapture, StopCapture))
 			Finish(s_runner->GetError());
 		else if (s_runner->IsComplete())
 			Finish();
@@ -179,7 +179,7 @@ namespace CaptureScript::Runtime
 			s_video_started = true;
 			s_video_frames++;
 		}
-		if (!s_runner->EndFrame(std::span<const u8>(eeMem->Main, Ps2MemSize::ExposedRam), ArmCapture, StopCapture))
+		if (!s_runner->EndFrame(std::span<u8>(eeMem->Main, Ps2MemSize::ExposedRam), ArmCapture, StopCapture))
 			Finish(s_runner->GetError());
 		else if (s_runner->IsComplete())
 			Finish();

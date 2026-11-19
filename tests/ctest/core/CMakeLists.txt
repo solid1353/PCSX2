@@ -22,6 +22,7 @@ add_pcsx2_test(core_test
 	gs_dump_tests.cpp
 	input_binding_tests.cpp
 	input_recording_tests.cpp
+	launch_setting_tests.cpp
 	memory_card_tests.cpp
 	pine_agent_control_tests.cpp
 	pine_replay_analysis_tests.cpp

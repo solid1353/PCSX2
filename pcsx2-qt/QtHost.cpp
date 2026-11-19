@@ -2349,6 +2349,7 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -agent-replay: Starts a read-only input recording paused and surfaceless for PINE analysis.\n");
 	std::fprintf(stderr, "  -mute: Mutes audio output for this process without changing persistent settings.\n");
 	std::fprintf(stderr, "  -read-only-settings: Prevents settings INI writes for this process.\n");
+	std::fprintf(stderr, "  -setting <Section>/<Key>=<Value>: Overrides a setting for this process, ahead of game settings. May be repeated; the last value wins.\n");
 	std::fprintf(stderr, "  -discard-memory-card-writes: Reports memory card writes as successful without changing card contents.\n");
 	std::fprintf(stderr, "  -volatile-memory-card: Keeps file card changes in RAM for the life of the process; folder card changes stay in memory and are dropped when the card is closed or reindexed (game boot or emulation stop).\n");
 	std::fprintf(stderr, "  -memory-card <path|none>: Uses an existing card file as a file card or folder card as a folder card in port 1, or disconnects all slots with none for this process.\n");
@@ -2476,6 +2477,21 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 			else if (CHECK_ARG(QStringLiteral("-read-only-settings")))
 			{
 				INISettingsInterface::SetSaveSuppressed(true);
+				continue;
+			}
+			else if (CHECK_ARG(QStringLiteral("-setting")))
+			{
+				Error error;
+				if (++it == args.end())
+				{
+					std::fprintf(stderr, "-setting requires <Section>/<Key>=<Value>.\n");
+					return false;
+				}
+				if (!Host::Internal::SetCommandLineSetting(it->toStdString(), &error))
+				{
+					fmt::print(stderr, "Invalid -setting argument '{}': {}\n", it->toStdString(), error.GetDescription());
+					return false;
+				}
 				continue;
 			}
 			else if (CHECK_ARG(QStringLiteral("-discard-memory-card-writes")))

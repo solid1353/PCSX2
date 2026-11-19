@@ -28,11 +28,23 @@ capture. See [scripted takes](capture_script.md).
 | `-surfaceless` | Runs without creating or activating any window; implies `-nogui` and batch mode. It opens no controllers, so physical controllers and their hotkeys do not reach it; only PINE and input recordings drive it. |
 | `-mute` | Mutes audio output. |
 | `-read-only-settings` | Prevents every settings INI write. |
+| `-setting <Section>/<Key>=<Value>` | Overrides a setting before VM boot for this process, ahead of the settings file and game settings. May be repeated; the last value for the same section and key wins. The override is kept in memory and is never saved. |
 | `-pine-port <port>` | Uses PINE slot `1024` through `65535` when PINE is enabled. |
 | `-savestate-folder <path>` | Saves and loads every savestate in this folder instead of the Savestates folder, creating it if missing: slots, hotkeys, PINE, and input recording capture savestates. |
 | `-input-recording-folder <path>` | Uses this InputRecordings folder for the process: hotkey saves, menu dialogs, and relative `-input-recording`/`-input-recording-create` paths. Relative folder paths resolve from the launch working directory. Missing folders and parents are created only when writing a recording. |
 | `-centered-window` | Sizes the game window to the presented image without borders, with its frame 768 pixels tall independent of display scaling, centers it on its screen, and suppresses starting fullscreen. The window follows later aspect-ratio changes. |
 | `-no-recenter` | Turns off the **Recenter Window On Aspect Change** setting for the run, so the window keeps the position it is given. `-centered-window` still applies. |
+
+For `-setting`, the section is everything before the last `/` before the first
+`=`, and the key is the remaining part before `=`. Both must be non-empty.
+The value may be empty and may contain `/` or `=`. Quote the entire argument
+when it contains spaces. A missing or malformed argument fails the launch
+with an error. Values use the same format as the corresponding INI setting.
+
+Use `-setting EmuCore/Speedhacks/EECycleRate=0` with `-capture-script` or
+`-input-recording` to run a take at its recorded EE cycle rate regardless of
+the user's global or game settings. Overrides also survive settings reloads
+and VM restarts within the process.
 
 Without `-centered-window`, the **Recenter Window On Aspect Change** interface
 setting (`RecenterGameWindow` in `[UI]`, on by default) gives every game the
@@ -97,6 +109,10 @@ combined with capture options or speed options. Batch mode exits PCSX2 when
 the VM shuts down, for example after the PINE shutdown opcode.
 
 ## Tests
+
+`tests/ctest/core/launch_setting_tests.cpp` covers override parsing, repeated
+keys, precedence over global and game settings, reloads, and saving the INIs
+without the overrides.
 
 `tests/ctest/core/memory_card_tests.cpp` covers volatile cards: RAM-only
 writes and erases across reopens, missing cards, raw card conversion, and

@@ -4,12 +4,36 @@
 #include "LayeredSettingsInterface.h"
 
 #include "common/Assertions.h"
+#include "common/Error.h"
 
 #include <unordered_set>
 
-LayeredSettingsInterface::LayeredSettingsInterface() = default;
+LayeredSettingsInterface::LayeredSettingsInterface()
+{
+	m_layers[LAYER_CMDLINE] = &m_command_line_settings;
+}
 
 LayeredSettingsInterface::~LayeredSettingsInterface() = default;
+
+bool LayeredSettingsInterface::SetCommandLineSetting(std::string_view assignment, Error* error)
+{
+	const size_t equals = assignment.find('=');
+	const std::string_view path = assignment.substr(0, equals);
+	const size_t slash = path.rfind('/');
+	if (equals == std::string_view::npos || slash == std::string_view::npos || slash == 0 ||
+		slash + 1 == path.size() || assignment.find_first_of("\r\n") != std::string_view::npos ||
+		assignment.find('\0') != std::string_view::npos)
+	{
+		Error::SetStringView(error, "-setting requires <Section>/<Key>=<Value> with a non-empty section and key.");
+		return false;
+	}
+
+	const std::string section(path.substr(0, slash));
+	const std::string key(path.substr(slash + 1));
+	const std::string value(assignment.substr(equals + 1));
+	m_command_line_settings.SetStringValue(section.c_str(), key.c_str(), value.c_str());
+	return true;
+}
 
 bool LayeredSettingsInterface::Save(Error* error)
 {

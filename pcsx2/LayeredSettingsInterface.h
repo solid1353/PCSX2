@@ -4,6 +4,7 @@
 #pragma once
 
 #include "common/SettingsInterface.h"
+#include "common/MemorySettingsInterface.h"
 
 #include <array>
 
@@ -25,6 +26,9 @@ public:
 
 	SettingsInterface* GetLayer(Layer layer) const { return m_layers[layer]; }
 	void SetLayer(Layer layer, SettingsInterface* sif) { m_layers[layer] = sif; }
+
+	/// Parses Section/Key=Value into the process-only command-line layer.
+	bool SetCommandLineSetting(std::string_view assignment, Error* error = nullptr);
 
 	bool Save(Error* error = nullptr) override;
 
@@ -73,4 +77,5 @@ private:
 	static constexpr Layer LAST_LAYER = LAYER_BASE;
 
 	std::array<SettingsInterface*, NUM_LAYERS> m_layers{};
+	MemorySettingsInterface m_command_line_settings;
 };

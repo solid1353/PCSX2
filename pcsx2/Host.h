@@ -17,6 +17,7 @@
 #include <string_view>
 #include <vector>
 
+class Error;
 class ProgressCallback;
 class SettingsInterface;
 
@@ -158,6 +159,9 @@ namespace Host
 
 	namespace Internal
 	{
+		/// Adds a process-only setting override before settings initialization.
+		bool SetCommandLineSetting(std::string_view assignment, Error* error = nullptr);
+
 		/// Retrieves the base settings layer. Must call with lock held.
 		SettingsInterface* GetBaseSettingsLayer();
 

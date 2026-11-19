@@ -358,6 +358,12 @@ SettingsInterface* Host::Internal::GetBaseSettingsLayer()
 	return s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE);
 }
 
+bool Host::Internal::SetCommandLineSetting(std::string_view assignment, Error* error)
+{
+	auto lock = GetSettingsLock();
+	return s_layered_settings_interface.SetCommandLineSetting(assignment, error);
+}
+
 SettingsInterface* Host::Internal::GetSecretsSettingsLayer()
 {
 	return s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS);

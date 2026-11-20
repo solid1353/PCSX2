@@ -152,4 +152,48 @@ namespace
 		EXPECT_EQ(NA228UJFrame::MarkText(contents, film, "t", "b", &mark), "\n10\tt\tb\tskill_uj\t\t7\t3\t1\t2\n");
 		EXPECT_EQ(mark, 10u);
 	}
+
+	class SourceGameUJFrameTest : public testing::Test
+	{
+	protected:
+		static constexpr uint32_t OWNER = 0x00700000;
+		static constexpr uint32_t CONTAINER = 0x00710000;
+		std::vector<uint8_t> ram = std::vector<uint8_t>(NA228ResourceMonitor::EE_RAM_SIZE);
+
+		void Write(uint32_t address, uint32_t value, uint32_t size = 4)
+		{
+			for (uint32_t i = 0; i < size; i++)
+				ram.at(address + i) = static_cast<uint8_t>(value >> (i * 8));
+		}
+
+		void SetFilm(uint32_t owner_slot, uint32_t parts_begun, uint32_t frame_offset, int32_t frame)
+		{
+			Write(owner_slot, OWNER);
+			Write(OWNER + parts_begun, 1, 2);
+			Write(OWNER + 0x04, CONTAINER);
+			Write(CONTAINER + frame_offset, static_cast<uint32_t>(frame));
+		}
+	};
+
+	TEST_F(SourceGameUJFrameTest, ShowsUN3FilmFrame)
+	{
+		SetFilm(0x006a3a18, 0x86, 0x1ec, 231);
+		EXPECT_EQ(NA228UJFrame::Format(ram, NA228UJFrame::UN3_DISC_CRC), "UJ frame 231");
+		EXPECT_EQ(NA228UJFrame::Format(ram), "");
+	}
+
+	TEST_F(SourceGameUJFrameTest, ShowsUN4FilmFrame)
+	{
+		SetFilm(0x00609800, 0x16a, 0x1bc, 50);
+		EXPECT_EQ(NA228UJFrame::Format(ram, NA228UJFrame::UN4_DISC_CRC), "UJ frame 50");
+	}
+
+	TEST_F(SourceGameUJFrameTest, ShowsNothingBeforeTheFilmBegins)
+	{
+		SetFilm(0x00609800, 0x16a, 0x1bc, 50);
+		Write(OWNER + 0x16a, 0, 2);
+		EXPECT_EQ(NA228UJFrame::Format(ram, NA228UJFrame::UN4_DISC_CRC), "");
+		Write(0x00609800, 0);
+		EXPECT_EQ(NA228UJFrame::Format(ram, NA228UJFrame::UN4_DISC_CRC), "");
+	}
 } // namespace

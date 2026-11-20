@@ -47,9 +47,41 @@ namespace NA228UJFrame
 		return true;
 	}
 
-	std::optional<Film> Read(std::span<const uint8_t> ram)
+	// A source game's skill-play owner and the offsets that lead to its film's frame (SLUS_217.27 and
+	// SLUS_218.62 annotations: sp_skill_play_owner and jutsu_skill_play_owner).
+	struct SourceGameFilm
+	{
+		uint32_t owner;
+		int64_t parts_begun;
+		int64_t frame;
+	};
+	static constexpr int64_t SOURCE_OWNER_CONTAINER = 0x04;
+	static constexpr SourceGameFilm UN3_FILM = {0x006a3a18, 0x86, 0x1ec};
+	static constexpr SourceGameFilm UN4_FILM = {0x00609800, 0x16a, 0x1bc};
+
+	static std::optional<Film> ReadSourceGame(std::span<const uint8_t> ram, const SourceGameFilm& layout)
+	{
+		uint32_t owner, parts, container, frame;
+		if (!ReadValue(ram, layout.owner, 0, 4, owner) ||
+			!ReadValue(ram, owner, layout.parts_begun, 2, parts) || static_cast<int16_t>(parts) <= 0 ||
+			!ReadValue(ram, owner, SOURCE_OWNER_CONTAINER, 4, container) ||
+			!ReadValue(ram, container, layout.frame, 4, frame))
+		{
+			return std::nullopt;
+		}
+
+		Film film;
+		film.frame = static_cast<int32_t>(frame);
+		return film;
+	}
+
+	std::optional<Film> Read(std::span<const uint8_t> ram, uint32_t disc_crc)
 	{
 		ram = ram.first(std::min<size_t>(ram.size(), NA228ResourceMonitor::EE_RAM_SIZE));
+		if (disc_crc == UN3_DISC_CRC)
+			return ReadSourceGame(ram, UN3_FILM);
+		if (disc_crc == UN4_DISC_CRC)
+			return ReadSourceGame(ram, UN4_FILM);
 		if (!NA228ResourceMonitor::Detect(ram))
 			return std::nullopt;
 
@@ -97,9 +129,9 @@ namespace NA228UJFrame
 		return film.part.has_value() ? fmt::format("{}:{}", *film.part, film.frame) : fmt::format("{}", film.frame);
 	}
 
-	std::string Format(std::span<const uint8_t> ram)
+	std::string Format(std::span<const uint8_t> ram, uint32_t disc_crc)
 	{
-		const std::optional<Film> film = Read(ram);
+		const std::optional<Film> film = Read(ram, disc_crc);
 		return film.has_value() ? fmt::format("UJ frame {}", FormatPosition(*film)) : std::string();
 	}
 

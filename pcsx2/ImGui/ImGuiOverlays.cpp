@@ -1890,10 +1890,14 @@ void ImGuiManager::SetNA228ResourceMonitor(bool enabled)
 void ImGuiManager::SetNA228UJFrame(bool enabled)
 {
 	GSConfig.OsdShowNA228UJFrame = enabled;
-	if (NA228ResourceMonitor::Detect(GetNA228Memory()))
+	const u32 disc_crc = VMManager::GetDiscCRC();
+	if (NA228ResourceMonitor::Detect(GetNA228Memory()) || disc_crc == NA228UJFrame::UN3_DISC_CRC ||
+		disc_crc == NA228UJFrame::UN4_DISC_CRC)
+	{
 		return;
+	}
 
-	const char* message = enabled ? "NA228 UJ Frame on: not an NA228 build" : "NA228 UJ Frame off";
+	const char* message = enabled ? "NA228 UJ Frame on: not NA2.28, UN3 or UN4" : "NA228 UJ Frame off";
 	Host::AddKeyedOSDMessage("NA228UJFrame", message, Host::OSD_QUICK_DURATION);
 }
 
@@ -1953,7 +1957,7 @@ void ImGuiManager::DrawNA228UJFrame(float scale, float margin, float spacing)
 	if (!GSConfig.OsdShowNA228UJFrame)
 		return;
 
-	std::string text = NA228UJFrame::Format(GetNA228Memory());
+	std::string text = NA228UJFrame::Format(GetNA228Memory(), VMManager::GetDiscCRC());
 	if (text.empty())
 		return;
 

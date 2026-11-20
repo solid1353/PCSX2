@@ -22,13 +22,18 @@ namespace NA228UJFrame
 		int16_t opponent = 0;
 	};
 
-	// Reads the playing film, or nothing when no film plays or the game is not an NA228 build. The span must
-	// refer directly to EE RAM and remain valid throughout the call; callers must check VM lifetime before
-	// supplying live memory.
-	std::optional<Film> Read(std::span<const uint8_t> ram);
+	// Retail source games whose films the overlay also reads, by disc CRC. Their films have one part, and only
+	// their frame is read.
+	static constexpr uint32_t UN3_DISC_CRC = 0xEE3737A4;
+	static constexpr uint32_t UN4_DISC_CRC = 0x5C9E1148;
+
+	// Reads the playing film in retail UN3 or UN4, chosen by `disc_crc`, or else in an NA228 build; nothing when no
+	// film plays or the game is neither. The span must refer directly to EE RAM and remain valid throughout the
+	// call; callers must check VM lifetime before supplying live memory.
+	std::optional<Film> Read(std::span<const uint8_t> ram, uint32_t disc_crc = 0);
 
 	// Returns the film's frame, such as "UJ frame 2:118", or an empty string when Read finds no film.
-	std::string Format(std::span<const uint8_t> ram);
+	std::string Format(std::span<const uint8_t> ram, uint32_t disc_crc = 0);
 
 	// The film's position as "part:frame", or "frame" for a single-part film.
 	std::string FormatPosition(const Film& film);

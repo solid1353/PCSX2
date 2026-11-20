@@ -31,10 +31,11 @@ The disc decides it at boot and on a disc change.
 The game list's Copy File Name context menu item and hotkey (default Ctrl+C)
 copy the selected entry's file name, with its extension, to the clipboard.
 
-The unbound Graphics hotkey Toggle NA228 UJ Frame shows, in an NA228 build, the
-playing Ultimate Jutsu film's frame below the NA228 Resource Monitor: `UJ frame
-2:118` for part 2 of a multi-part film, `UJ frame 118` otherwise, and nothing
-when no film plays (`pcsx2/NA228UJFrame.cpp`). It and the NA228 Resource Monitor
+The unbound Graphics hotkey Toggle NA228 UJ Frame shows, in an NA228 build or
+retail UN3 or UN4 (recognized by disc CRC), the playing Ultimate Jutsu film's
+frame below the NA228 Resource Monitor: `UJ frame 2:118` for part 2 of a
+multi-part NA228 film, `UJ frame 118` otherwise, and nothing when no film plays
+(`pcsx2/NA228UJFrame.cpp`). It and the NA228 Resource Monitor
 keep their on/off state in `OsdShowNA228UJFrame` and
 `OsdShowNA228ResourceMonitor` in `[EmuCore/GS]`. On-screen messages placed at
 the top left start below whichever of the two is showing, so neither covers

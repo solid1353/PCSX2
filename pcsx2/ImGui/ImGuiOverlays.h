@@ -14,6 +14,8 @@ namespace ImGuiManager
 	// Called on the GS thread, like the overlay renderer.
 	void SetNA228ResourceMonitor(bool enabled);
 	void SetNA228UJFrame(bool enabled);
+	// The y below the NA228 panels drawn in the top-left corner this frame, or 0 when none were drawn.
+	float GetNA228PanelsBottom();
 }
 
 ImVec2 CalculateOSDPosition(OsdOverlayPos position, float margin, const ImVec2& text_size, float window_width, float window_height);

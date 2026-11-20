@@ -1312,7 +1312,9 @@ BEGIN_HOTKEY_LIST(g_gs_hotkeys){"Screenshot", TRANSLATE_NOOP("Hotkeys", "Graphic
 		}},
 	{"MarkNA228UJFrame", TRANSLATE_NOOP("Hotkeys", "Graphics"), TRANSLATE_NOOP("Hotkeys", "Mark UJ Frame"),
 		[](s32 pressed) {
-			if (pressed || !VMManager::HasValidVM() || !eeMem)
+			// Only the widescreen NA228 instance marks, silently elsewhere, so one gamepad press that reaches
+			// every running instance marks once.
+			if (pressed || !VMManager::HasValidVM() || !eeMem || !VMManager::IsNA228Widescreen())
 				return;
 
 			const std::optional<NA228UJFrame::Film> film = NA228UJFrame::Read({eeMem->Main, Ps2MemSize::MainRam});

@@ -937,6 +937,10 @@ void ImGuiManager::DrawOSDMessages(Common::Timer::Value current_time)
 	switch (GSConfig.OsdMessagesPos)
 	{
 		case OsdOverlayPos::TopLeft:
+			// The NA228 panels share the top-left corner, so messages start below them.
+			position_y = VMManager::HasValidVM() ? std::max(margin, GetNA228PanelsBottom()) : margin;
+			break;
+
 		case OsdOverlayPos::TopCenter:
 		case OsdOverlayPos::TopRight:
 			position_y = margin;

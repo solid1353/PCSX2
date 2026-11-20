@@ -36,10 +36,14 @@ playing Ultimate Jutsu film's frame below the NA228 Resource Monitor: `UJ frame
 2:118` for part 2 of a multi-part film, `UJ frame 118` otherwise, and nothing
 when no film plays (`pcsx2/NA228UJFrame.cpp`). It and the NA228 Resource Monitor
 keep their on/off state in `OsdShowNA228UJFrame` and
-`OsdShowNA228ResourceMonitor` in `[EmuCore/GS]`.
+`OsdShowNA228ResourceMonitor` in `[EmuCore/GS]`. On-screen messages placed at
+the top left start below whichever of the two is showing, so neither covers
+them.
 
-The Graphics hotkey Mark UJ Frame (`MarkNA228UJFrame`) appends the playing
-film's frame to `uj_frames.tsv` in the folder that holds the savestates folder,
+The Graphics hotkey Mark UJ Frame (`MarkNA228UJFrame`) works only in a
+widescreen NA228 build, the one presented at 16:9, and does nothing and shows
+nothing elsewhere, so a gamepad press reaching several instances marks once. It
+appends the playing film's frame to `uj_frames.tsv` in the folder that holds the savestates folder,
 and shows `Mark N: <film> <part>:<frame>`; with no film playing it writes nothing
 and shows `No UJ film playing`. An empty or missing file first gets the header
 `mark time build film part frame skill attacker opponent`, tab-separated with LF

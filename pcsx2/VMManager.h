@@ -100,6 +100,9 @@ namespace VMManager
 	/// Returns the path of the disc currently running.
 	std::string GetDiscPath();
 
+	/// Returns true when the running disc is an NA228 build with the widescreen setting.
+	bool IsNA228Widescreen();
+
 	/// Returns the serial of the disc currently running.
 	std::string GetDiscSerial();
 

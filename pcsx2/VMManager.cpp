@@ -211,6 +211,7 @@ static std::string s_title;
 static std::string s_title_en_search;
 static std::string s_title_en_replace;
 static u32 s_disc_crc;
+static std::atomic_bool s_na228_widescreen{false};
 static u32 s_current_crc;
 static u32 s_elf_entry_point = 0xFFFFFFFFu;
 static std::string s_elf_path;
@@ -385,6 +386,11 @@ std::string VMManager::GetDiscPath()
 {
 	std::unique_lock lock(s_info_mutex);
 	return CDVDsys_GetFile(CDVDsys_GetSourceType());
+}
+
+bool VMManager::IsNA228Widescreen()
+{
+	return s_na228_widescreen.load(std::memory_order_acquire);
 }
 
 std::string VMManager::GetDiscSerial()
@@ -1934,6 +1940,7 @@ void VMManager::ShutdownImpl(bool save_resume_state, bool restarting)
 	FPControlRegister::SetCurrent(FPControlRegister::GetDefault());
 
 	Patch::UnloadPatches();
+	s_na228_widescreen.store(false, std::memory_order_release);
 	R3000A::ioman::reset();
 	vtlb_Shutdown();
 	USBclose();
@@ -3497,6 +3504,7 @@ void VMManager::UpdateNA228Widescreen()
 					 cdvdLoadDiscElf(&elfo, isor, s_disc_elf, false, nullptr) && NA228Widescreen::Detect(elfo.GetData());
 	}
 
+	s_na228_widescreen.store(widescreen, std::memory_order_release);
 	const float old_aspect_ratio = EmuConfig.CurrentCustomAspectRatio;
 	Patch::SetRuntimeAspectRatio(widescreen ? std::optional<float>(16.0f / 9.0f) : std::nullopt);
 	if (EmuConfig.CurrentCustomAspectRatio != old_aspect_ratio)

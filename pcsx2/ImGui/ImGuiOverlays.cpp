@@ -83,6 +83,8 @@ static NA228ResourceMonitor::History s_na228_monitor_history;
 static ImVec4 s_performance_overlay_bounds;
 // Top of the next NA228 panel; the panels stack down the left edge.
 static float s_na228_panel_y = 0.0f;
+// Below the last NA228 panel drawn this frame, 0 when none were; top-left OSD messages start there.
+static float s_na228_panels_bottom = 0.0f;
 
 static void IncludePerformanceOverlayBounds(const ImVec2& position, const ImVec2& size)
 {
@@ -1909,6 +1911,7 @@ void ImGuiManager::DrawNA228Panel(const char* id, std::span<const NA228ResourceM
 	ImGui::SetNextWindowPos(ImVec2(margin, s_na228_panel_y));
 	ImGui::SetNextWindowSize(size);
 	s_na228_panel_y += size.y + spacing;
+	s_na228_panels_bottom = s_na228_panel_y;
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.45f));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f * scale);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padding, padding));
@@ -1958,6 +1961,11 @@ void ImGuiManager::DrawNA228UJFrame(float scale, float margin, float spacing)
 	DrawNA228Panel("##na228_uj_frame", {&line, 1}, scale, margin, spacing);
 }
 
+float ImGuiManager::GetNA228PanelsBottom()
+{
+	return s_na228_panels_bottom;
+}
+
 void ImGuiManager::RenderOverlays()
 {
 	const float scale = ImGuiManager::GetGlobalScale();
@@ -1975,6 +1983,7 @@ void ImGuiManager::RenderOverlays()
 	s_na228_panel_y = (GSConfig.OsdPerformancePos == OsdOverlayPos::TopLeft && s_performance_overlay_bounds.w > s_performance_overlay_bounds.y) ?
 	                      s_performance_overlay_bounds.w + spacing :
 	                      margin;
+	s_na228_panels_bottom = 0.0f;
 	DrawNA228ResourceMonitor(scale, margin, spacing);
 	DrawNA228UJFrame(scale, margin, spacing);
 	DrawSettingsOverlay(scale, margin, spacing);

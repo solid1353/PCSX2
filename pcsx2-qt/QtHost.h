@@ -257,6 +257,9 @@ namespace QtHost
 	/// Returns true if the display window should track the presented game aspect and remain centered for this process.
 	bool ShouldCenterDisplayWindow();
 
+	/// Returns true if the main window draws over its left, right and bottom frames for this process (Windows).
+	bool ShouldHideSideFrames();
+
 	/// Executes a function on the UI thread.
 	void RunOnUIThread(const std::function<void()>& func, bool block = false);
 

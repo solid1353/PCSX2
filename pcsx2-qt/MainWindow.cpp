@@ -79,6 +79,7 @@
 #ifdef _WIN32
 #include "common/RedtapeWindows.h"
 #include <Dbt.h>
+#include <dwmapi.h>
 #endif
 
 const char* MainWindow::OPEN_FILE_FILTER =
@@ -3002,6 +3003,15 @@ void MainWindow::showEvent(QShowEvent* event)
 	if (isShowingGameList())
 		m_game_list_widget->resizeTableViewColumnsToFit();
 
+#ifdef _WIN32
+	// The first frame calculation runs before DWM can report the visible frame, so redo it once shown.
+	if (QtHost::ShouldHideSideFrames())
+	{
+		SetWindowPos(reinterpret_cast<HWND>(winId()), nullptr, 0, 0, 0, 0,
+			SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+	}
+#endif
+
 #ifdef ENABLE_RAINTEGRATION
 	if (Achievements::IsUsingRAIntegration())
 		Achievements::RAIntegration::MainWindowChanged((void*)winId());
@@ -3196,6 +3206,26 @@ bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr
 	if (eventType == QByteArray(win_type, sizeof(win_type) - 1))
 	{
 		const MSG* msg = static_cast<const MSG*>(message);
+		if (msg->message == WM_NCCALCSIZE && msg->wParam == TRUE && QtHost::ShouldHideSideFrames() &&
+			!IsZoomed(msg->hwnd) && !isFullScreen())
+		{
+			// The window rect includes invisible resize borders outside the visible frame. Keep the standard
+			// caption, but end the client area at the visible frame's left, right and bottom edges, so the frame
+			// DWM reports equals the client area on those sides.
+			RECT window, frame;
+			if (GetWindowRect(msg->hwnd, &window) &&
+				SUCCEEDED(DwmGetWindowAttribute(msg->hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame))))
+			{
+				NCCALCSIZE_PARAMS* const params = reinterpret_cast<NCCALCSIZE_PARAMS*>(msg->lParam);
+				const RECT proposed = params->rgrc[0];
+				*result = DefWindowProcW(msg->hwnd, WM_NCCALCSIZE, msg->wParam, msg->lParam);
+				params->rgrc[0].left = proposed.left + (frame.left - window.left);
+				params->rgrc[0].right = proposed.right - (window.right - frame.right);
+				params->rgrc[0].bottom = proposed.bottom - (window.bottom - frame.bottom);
+				return true;
+			}
+		}
+
 		if (msg->message == WM_DEVICECHANGE && msg->wParam == DBT_DEVNODES_CHANGED)
 		{
 			g_emu_thread->reloadInputDevices();

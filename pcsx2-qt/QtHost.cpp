@@ -118,6 +118,7 @@ static bool s_start_big_picture_mode = false;
 static bool s_start_fullscreen = false;
 static bool s_center_display_window = false;
 static bool s_no_recenter = false;
+static bool s_no_side_frames = false;
 static float s_center_display_window_aspect_ratio = 0.0f;
 static constexpr s32 CENTERED_DISPLAY_ASPECT_RATIO_HEIGHT = 10000;
 static bool s_test_config_and_exit = false;
@@ -1714,6 +1715,11 @@ bool QtHost::ShouldCenterDisplayWindow()
 	return s_center_display_window;
 }
 
+bool QtHost::ShouldHideSideFrames()
+{
+	return s_no_side_frames;
+}
+
 void QtHost::RunOnUIThread(const std::function<void()>& func, bool block /*= false*/)
 {
 	// main window always exists, so it's fine to attach it to that.
@@ -2394,6 +2400,7 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -nofullscreen: Prevents fullscreen mode from triggering if enabled.\n");
 	std::fprintf(stderr, "  -centered-window: Fits the window to the presented game image without borders and centers it at approximately 1024x768, independent of display scaling.\n");
 	std::fprintf(stderr, "  -no-recenter: Does not recenter the window on game start or aspect-ratio change, whatever the Recenter Window On Aspect Change setting says.\n");
+	std::fprintf(stderr, "  -no-side-frames: Draws the main window over its left, right and bottom frames, keeping the title bar (Windows), so tiled windows meet edge to edge.\n");
 	std::fprintf(stderr, "  -bigpicture: Forces PCSX2 to use the Big Picture mode (useful for controller-only and couch play).\n");
 	std::fprintf(stderr, "  -earlyconsolelog: Forces logging of early console messages to console.\n");
 	std::fprintf(stderr, "  -testconfig: Initializes configuration and checks version, then exits.\n");
@@ -2794,6 +2801,11 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 			else if (CHECK_ARG(QStringLiteral("-no-recenter")))
 			{
 				s_no_recenter = true;
+				continue;
+			}
+			else if (CHECK_ARG(QStringLiteral("-no-side-frames")))
+			{
+				s_no_side_frames = true;
 				continue;
 			}
 			else if (CHECK_ARG(QStringLiteral("-earlyconsolelog")))

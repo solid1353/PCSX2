@@ -87,7 +87,14 @@ namespace CaptureScript
 				while (!AtEnd())
 				{
 					Statement statement{};
-					const std::string_view command = Word();
+					std::string_view command = Word();
+					if (command == "pad0" || command == "pad1")
+					{
+						statement.pad = command == "pad1" ? 1 : 0;
+						command = Word();
+						if (command != "hold" && command != "sticks")
+							return Error("a pad prefix must be followed by hold or sticks");
+					}
 					if (command == "wait")
 					{
 						statement.type = Statement::Type::Wait;
@@ -505,10 +512,10 @@ namespace CaptureScript
 						return true;
 					break;
 				case Statement::Type::Hold:
-					m_buttons = statement.buttons;
+					m_buttons[statement.pad] = statement.buttons;
 					break;
 				case Statement::Type::Sticks:
-					m_sticks = statement.sticks;
+					m_sticks[statement.pad] = statement.sticks;
 					break;
 				case Statement::Type::Capture:
 					if (!capture(statement.path))

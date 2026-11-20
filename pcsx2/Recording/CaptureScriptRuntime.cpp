@@ -116,18 +116,19 @@ namespace CaptureScript::Runtime
 		if (!s_runner)
 			return;
 		// Full-pressure digital buttons and raw stick bytes, using the replay pad format.
-		std::array<u8, 18> state = {0xff, 0xff, 127, 127, 127, 127};
-		const auto& sticks = s_runner->GetSticks();
-		std::copy(sticks.begin(), sticks.end(), state.begin() + 2);
-		const u16 buttons = s_runner->GetButtons();
-		state[0] = static_cast<u8>(~buttons);
-		state[1] = static_cast<u8>(~(buttons >> 8));
 		static constexpr unsigned pressure_bits[] = {5, 7, 4, 6, 12, 13, 14, 15, 10, 11, 8, 9};
-		for (size_t i = 0; i < std::size(pressure_bits); i++)
-			state[6 + i] = (buttons & (1u << pressure_bits[i])) ? 255 : 0;
-		PadData(0, 0, state).OverrideActualController();
-		state = {0xff, 0xff, 127, 127, 127, 127};
-		PadData(1, 0, state).OverrideActualController();
+		for (u32 pad = 0; pad < Runner::NUM_PADS; pad++)
+		{
+			std::array<u8, 18> state = {};
+			const auto& sticks = s_runner->GetSticks(pad);
+			std::copy(sticks.begin(), sticks.end(), state.begin() + 2);
+			const u16 buttons = s_runner->GetButtons(pad);
+			state[0] = static_cast<u8>(~buttons);
+			state[1] = static_cast<u8>(~(buttons >> 8));
+			for (size_t i = 0; i < std::size(pressure_bits); i++)
+				state[6 + i] = (buttons & (1u << pressure_bits[i])) ? 255 : 0;
+			PadData(static_cast<int>(pad), 0, state).OverrideActualController();
+		}
 	}
 
 	void CollectAudioSample(const float* sample)

@@ -126,6 +126,10 @@ TEST(CaptureScriptParser, RejectsMalformedScriptsBeforeExecution)
 		"sticks 0 1 2 256",
 		"sticks -1 127 127 127",
 		"sticks 0 1 2 3 4",
+		"pad1",
+		"pad1 run 1",
+		"pad2 hold cross",
+		"pad1 pad1 hold cross",
 		"stop",
 		"capture a.mp4; run 1; stop",
 		"capture a.mkv",
@@ -310,6 +314,24 @@ TEST_F(CaptureScriptTest, CopiesRecordedStickBytesWithoutConversionOrReordering)
 	EXPECT_EQ(runner->GetSticks(), (std::array<u8, 4>{19, 237, 0, 255}));
 	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
 	EXPECT_EQ(runner->GetSticks(), (std::array<u8, 4>{255, 0, 127, 128}));
+	EXPECT_TRUE(runner->IsComplete());
+}
+
+TEST_F(CaptureScriptTest, PadPrefixDrivesEachPadIndependently)
+{
+	auto runner = MakeRunner("pad1 hold start; pad1 sticks 0 1 2 3; hold cross; run 1; pad0 hold none; run 1; pad1 hold none; pad1 sticks 127 127 127 127");
+	ASSERT_TRUE(runner);
+	ASSERT_TRUE(runner->Start(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetButtons(0), 1u << 14);
+	EXPECT_EQ(runner->GetButtons(1), 1u << 3);
+	EXPECT_EQ(runner->GetSticks(0), (std::array<u8, 4>{127, 127, 127, 127}));
+	EXPECT_EQ(runner->GetSticks(1), (std::array<u8, 4>{0, 1, 2, 3}));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetButtons(0), 0);
+	EXPECT_EQ(runner->GetButtons(1), 1u << 3);
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_EQ(runner->GetButtons(1), 0);
+	EXPECT_EQ(runner->GetSticks(1), (std::array<u8, 4>{127, 127, 127, 127}));
 	EXPECT_TRUE(runner->IsComplete());
 }
 

@@ -73,6 +73,7 @@ namespace CaptureScript
 		};
 		Type type;
 		u64 frames = 0;
+		u32 pad = 0; // Hold and sticks: the pad port they drive.
 		u16 buttons = 0;
 		std::array<u8, 4> sticks = {127, 127, 127, 127}; // Right X/Y, left X/Y, as stored in PadData.
 		Condition condition;
@@ -93,8 +94,9 @@ namespace CaptureScript
 		bool EndFrame(std::span<u8> ram, const CaptureAction& capture, const StopAction& stop);
 		bool IsComplete() const { return m_statement == m_program.size() && m_error.empty(); }
 		bool IsCapturing() const { return m_capturing; }
-		u16 GetButtons() const { return m_buttons; }
-		const std::array<u8, 4>& GetSticks() const { return m_sticks; }
+		static constexpr u32 NUM_PADS = 2;
+		u16 GetButtons(u32 pad = 0) const { return m_buttons[pad]; }
+		const std::array<u8, 4>& GetSticks(u32 pad = 0) const { return m_sticks[pad]; }
 		u64 GetFrameCount() const { return m_frame; }
 		const std::string& GetError() const { return m_error; }
 
@@ -106,8 +108,8 @@ namespace CaptureScript
 		u64 m_frame = 0;
 		u64 m_elapsed = 0;
 		std::optional<s64> m_initial_value;
-		u16 m_buttons = 0;
-		std::array<u8, 4> m_sticks = {127, 127, 127, 127};
+		std::array<u16, NUM_PADS> m_buttons = {};
+		std::array<std::array<u8, 4>, NUM_PADS> m_sticks = {{{127, 127, 127, 127}, {127, 127, 127, 127}}};
 		bool m_capturing = false;
 		std::string m_error;
 	};

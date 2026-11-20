@@ -25,9 +25,17 @@ script as one argument, including on macOS. Names are lowercase.
 Buttons are `cross`, `circle`, `square`, `triangle`, `up`, `down`, `left`,
 `right`, `l1`, `l2`, `l3`, `r1`, `r2`, `r3`, `start`, and `select`, joined
 with `+`. `hold none` releases the buttons without changing the sticks.
-Pad 0 starts neutral, with all stick axes at 127, and pressure buttons use
-full pressure. Pad 1 stays neutral.
-Host pad bindings and macros cannot supply input during a script.
+Both pads start neutral, with all stick axes at 127, and pressure buttons use
+full pressure. Host pad bindings and macros cannot supply input during a script.
+
+`hold` and `sticks` drive pad 0, the first controller port. Prefix them with
+`pad1` to drive pad 1, the second port, instead; `pad0` names pad 0
+explicitly. Each pad keeps its own buttons and sticks, so one pad's statements
+never change the other's:
+
+```text
+hold start; pad1 hold start; run 2; hold none; pad1 hold none
+```
 
 Stick values and their order exactly match recording pad bytes 2–5:
 right X, right Y, left X, left Y. Zero is left/up, 255 is right/down, and

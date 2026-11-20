@@ -109,4 +109,47 @@ namespace
 		Write(0x00607748, 0x02000000);
 		EXPECT_EQ(Format(), "");
 	}
+	TEST_F(NA228UJFrameTest, ReadsFilmNameAndFighters)
+	{
+		const char name[] = "skill_uj_naruto";
+		for (uint32_t i = 0; i < sizeof(name); i++)
+			Write(CONTAINER + 0x04 + i, static_cast<uint8_t>(name[i]), 1);
+		Write(OWNER + 0x36, 12, 2);
+		Write(OWNER + 0x38, 0xffff, 2);
+		const auto film = NA228UJFrame::Read(ram);
+		ASSERT_TRUE(film.has_value());
+		EXPECT_EQ(film->name, "skill_uj_naruto");
+		EXPECT_EQ(film->part, std::optional<int16_t>(2));
+		EXPECT_EQ(film->frame, 118);
+		EXPECT_EQ(film->skill, SKILL);
+		EXPECT_EQ(film->attacker, 12);
+		EXPECT_EQ(film->opponent, -1);
+		EXPECT_EQ(NA228UJFrame::FormatPosition(*film), "2:118");
+	}
+
+	TEST_F(NA228UJFrameTest, LimitsFilmNameTo32Bytes)
+	{
+		for (uint32_t i = 0; i < 40; i++)
+			Write(CONTAINER + 0x04 + i, 'a', 1);
+		EXPECT_EQ(NA228UJFrame::Read(ram)->name, std::string(32, 'a'));
+	}
+
+	TEST(NA228UJFrameMarks, WritesHeaderAndFirstMarkToEmptyFile)
+	{
+		NA228UJFrame::Film film{"skill_uj", 2, 118, 3, 12, -1};
+		uint32_t mark = 0;
+		EXPECT_EQ(NA228UJFrame::MarkText("", film, "2026-11-20 10:00:00", "NA2.28 - dev", &mark),
+			"mark\ttime\tbuild\tfilm\tpart\tframe\tskill\tattacker\topponent\n"
+			"1\t2026-11-20 10:00:00\tNA2.28 - dev\tskill_uj\t2\t118\t3\t12\t-1\n");
+		EXPECT_EQ(mark, 1u);
+	}
+
+	TEST(NA228UJFrameMarks, NumbersAboveHighestMarkAndLeavesPartEmptyForSinglePartFilm)
+	{
+		NA228UJFrame::Film film{"skill_uj", std::nullopt, 7, 3, 1, 2};
+		uint32_t mark = 0;
+		const std::string contents = "mark\ttime\n4\ta\n9\tb\n2\tc";
+		EXPECT_EQ(NA228UJFrame::MarkText(contents, film, "t", "b", &mark), "\n10\tt\tb\tskill_uj\t\t7\t3\t1\t2\n");
+		EXPECT_EQ(mark, 10u);
+	}
 } // namespace

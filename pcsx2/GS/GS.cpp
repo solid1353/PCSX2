@@ -17,6 +17,8 @@
 #include "Host.h"
 #include "Input/InputManager.h"
 #include "MTGS.h"
+#include "MemoryTypes.h"
+#include "NA228UJFrame.h"
 #include "pcsx2/GS.h"
 #include "GS/Renderers/Null/GSRendererNull.h"
 #include "GS/Renderers/HW/GSRendererHW.h"
@@ -53,7 +55,10 @@
 
 #include "fmt/format.h"
 
+#include <cstdio>
+#include <ctime>
 #include <fstream>
+#include <optional>
 
 Pcsx2Config::GSOptions GSConfig;
 
@@ -1304,6 +1309,38 @@ BEGIN_HOTKEY_LIST(g_gs_hotkeys){"Screenshot", TRANSLATE_NOOP("Hotkeys", "Graphic
 
 			EmuConfig.GS.OsdShowNA228UJFrame = !EmuConfig.GS.OsdShowNA228UJFrame;
 			SetNA228Overlay("OsdShowNA228UJFrame", EmuConfig.GS.OsdShowNA228UJFrame, &ImGuiManager::SetNA228UJFrame);
+		}},
+	{"MarkNA228UJFrame", TRANSLATE_NOOP("Hotkeys", "Graphics"), TRANSLATE_NOOP("Hotkeys", "Mark UJ Frame"),
+		[](s32 pressed) {
+			if (pressed || !VMManager::HasValidVM() || !eeMem)
+				return;
+
+			const std::optional<NA228UJFrame::Film> film = NA228UJFrame::Read({eeMem->Main, Ps2MemSize::MainRam});
+			if (!film.has_value())
+			{
+				Host::AddKeyedOSDMessage("MarkNA228UJFrame", "No UJ film playing", Host::OSD_QUICK_DURATION);
+				return;
+			}
+
+			// The marks file sits beside the savestates folder. It is read afresh and appended in one write each
+			// time, never held open, since a script takes marks out by replacing the whole file.
+			const std::string path = Path::Combine(Path::GetDirectory(EmuFolders::Savestates), "uj_frames.tsv");
+			const std::time_t now = std::time(nullptr);
+			char time[32] = {};
+			std::strftime(time, sizeof(time), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+			const std::string contents = FileSystem::ReadFileToString(path.c_str()).value_or(std::string());
+			u32 mark;
+			const std::string text =
+				NA228UJFrame::MarkText(contents, *film, time, Path::GetFileTitle(VMManager::GetDiscPath()), &mark);
+			std::FILE* file = FileSystem::OpenCFile(path.c_str(), "ab");
+			bool written = file && std::fwrite(text.data(), 1, text.size(), file) == text.size();
+			if (file)
+				written = (std::fclose(file) == 0) && written;
+
+			Host::AddKeyedOSDMessage("MarkNA228UJFrame",
+				written ? fmt::format("Mark {}: {} {}", mark, film->name, NA228UJFrame::FormatPosition(*film)) :
+				          fmt::format("Could not write UJ frame mark to '{}'.", path),
+				written ? Host::OSD_QUICK_DURATION : Host::OSD_ERROR_DURATION);
 		}},
 	{"CycleAspectRatio", TRANSLATE_NOOP("Hotkeys", "Graphics"), TRANSLATE_NOOP("Hotkeys", "Cycle Aspect Ratio"),
 		[](s32 pressed) {

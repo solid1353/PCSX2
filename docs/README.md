@@ -38,6 +38,17 @@ when no film plays (`pcsx2/NA228UJFrame.cpp`). It and the NA228 Resource Monitor
 keep their on/off state in `OsdShowNA228UJFrame` and
 `OsdShowNA228ResourceMonitor` in `[EmuCore/GS]`.
 
+The Graphics hotkey Mark UJ Frame (`MarkNA228UJFrame`) appends the playing
+film's frame to `uj_frames.tsv` in the folder that holds the savestates folder,
+and shows `Mark N: <film> <part>:<frame>`; with no film playing it writes nothing
+and shows `No UJ film playing`. An empty or missing file first gets the header
+`mark time build film part frame skill attacker opponent`, tab-separated with LF
+line ends. Each mark is one above the file's highest; `time` is local
+`YYYY-MM-DD HH:MM:SS`, `build` the disc image's name without its extension,
+`film` the container's name, and `part` is empty for a single-part film. The
+file is read afresh and appended in one write on every press and never held
+open, so a script can replace it between presses (`pcsx2/GS/GS.cpp`).
+
 The toolbar's Settings button always opens Settings, without a menu while a
 game runs (`pcsx2-qt/MainWindow.cpp`).
 

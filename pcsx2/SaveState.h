@@ -58,8 +58,8 @@ extern bool SaveState_SaveScreenshotToFile(const char* filename, Error* error);
 extern bool SaveState_SaveToDirectory(
 	std::unique_ptr<SaveStateEntryList> srclist, std::unique_ptr<SaveStateScreenshotData> screenshot,
 	const char* directory, const char* screenshot_filename, Error* error);
-// A savestate directory holds Screenshot.png and a "state" subdirectory with every other file.
-extern std::string SaveState_GetComponentDirectory(const std::string_view directory);
+// A savestate is a directory of state files and its screenshot, "<directory>.png", beside it.
+extern std::string SaveState_GetScreenshotPath(std::string_view directory);
 extern bool SaveState_ReadScreenshot(const std::string& directory, u32* out_width, u32* out_height, std::vector<u32>* out_pixels);
 extern bool SaveState_LoadFromDirectory(const std::string& directory, Error* error);
 

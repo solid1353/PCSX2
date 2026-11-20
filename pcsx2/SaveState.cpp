@@ -337,7 +337,6 @@ void memLoadingState::FreezeMem(void* data, int size)
 }
 
 static const char* EntryFilename_StateVersion = "PCSX2 Savestate Version.id";
-static const char* EntryFilename_Screenshot = "Screenshot.png";
 static const char* EntryFilename_InternalStructures = "PCSX2 Internal Structures.dat";
 static constexpr u32 STATE_PCSX2_VERSION_SIZE = 32;
 
@@ -939,17 +938,18 @@ static bool SaveState_WriteFile(
 	return true;
 }
 
-std::string SaveState_GetComponentDirectory(const std::string_view directory)
+std::string SaveState_GetScreenshotPath(std::string_view directory)
 {
-	return Path::Combine(directory, "state");
+	while (!directory.empty() && (directory.back() == '/' || directory.back() == '\\'))
+		directory.remove_suffix(1);
+	return fmt::format("{}.png", directory);
 }
 
 bool SaveState_SaveToDirectory(
 	std::unique_ptr<SaveStateEntryList> srclist, std::unique_ptr<SaveStateScreenshotData> screenshot,
 	const char* directory, const char* screenshot_filename, Error* error)
 {
-	const std::string components = SaveState_GetComponentDirectory(directory);
-	if (!FileSystem::CreateDirectoryPath(components.c_str(), true, error))
+	if (!FileSystem::CreateDirectoryPath(directory, false, error))
 	{
 		if (!error->IsValid())
 			Error::SetStringFmt(error, TRANSLATE_FS("SaveState", "Failed to create save state directory '{}'."), directory);
@@ -958,13 +958,13 @@ bool SaveState_SaveToDirectory(
 
 	SaveStateVersionIndicator version = {g_SaveVersion, {}};
 	StringUtil::Strlcpy(version.version, BuildVersion::GitTaggedCommit ? BuildVersion::GitTag : "Unknown", std::size(version.version));
-	if (!SaveState_WriteFile(components, EntryFilename_StateVersion, &version, sizeof(version), error))
+	if (!SaveState_WriteFile(directory, EntryFilename_StateVersion, &version, sizeof(version), error))
 		return false;
 
 	for (uint i = 0; i < srclist->GetLength(); ++i)
 	{
 		const SaveStateEntry& entry = (*srclist)[i];
-		if (entry.GetDataSize() && !SaveState_WriteFile(components, entry.GetFilename().c_str(),
+		if (entry.GetDataSize() && !SaveState_WriteFile(directory, entry.GetFilename().c_str(),
 									   srclist->GetPtr(entry.GetDataIndex()), entry.GetDataSize(), error))
 		{
 			return false;
@@ -978,9 +978,11 @@ bool SaveState_SaveToDirectory(
 		return false;
 	}
 
+	const std::string screenshot_path = SaveState_GetScreenshotPath(directory);
 	if (!encoded_screenshot.empty() &&
-		!SaveState_WriteFile(directory, EntryFilename_Screenshot, encoded_screenshot.data(), encoded_screenshot.size(), error))
+		!FileSystem::WriteBinaryFile(screenshot_path.c_str(), encoded_screenshot.data(), encoded_screenshot.size()))
 	{
+		Error::SetStringFmt(error, TRANSLATE_FS("SaveState", "Failed to save screenshot to '{}'."), screenshot_path);
 		return false;
 	}
 
@@ -998,7 +1000,7 @@ bool SaveState_SaveToDirectory(
 bool SaveState_ReadScreenshot(const std::string& directory, u32* out_width, u32* out_height, std::vector<u32>* out_pixels)
 {
 	const std::optional<std::vector<u8>> screenshot =
-		FileSystem::ReadBinaryFile(Path::Combine(directory, EntryFilename_Screenshot).c_str());
+		FileSystem::ReadBinaryFile(SaveState_GetScreenshotPath(directory).c_str());
 	if (!screenshot.has_value())
 		return false;
 
@@ -1089,12 +1091,11 @@ bool SaveState_LoadFromDirectory(const std::string& directory, Error* error)
 		return false;
 	}
 
-	const std::string components = SaveState_GetComponentDirectory(directory);
-	if (!CheckVersion(components, error))
+	if (!CheckVersion(directory, error))
 		return false;
 
 	// check that all parts are included
-	const bool has_internal_structures = CheckFileExistsInState(components, EntryFilename_InternalStructures, true);
+	const bool has_internal_structures = CheckFileExistsInState(directory, EntryFilename_InternalStructures, true);
 	bool entry_present[std::size(SavestateEntries)];
 
 	// Log any parts and pieces that are missing, and then generate an exception.
@@ -1102,7 +1103,7 @@ bool SaveState_LoadFromDirectory(const std::string& directory, Error* error)
 	for (u32 i = 0; i < std::size(SavestateEntries); i++)
 	{
 		const bool required = SavestateEntries[i]->IsRequired();
-		entry_present[i] = CheckFileExistsInState(components, SavestateEntries[i]->GetFilename(), required);
+		entry_present[i] = CheckFileExistsInState(directory, SavestateEntries[i]->GetFilename(), required);
 		if (!entry_present[i] && required)
 		{
 			allPresent = false;
@@ -1117,7 +1118,7 @@ bool SaveState_LoadFromDirectory(const std::string& directory, Error* error)
 
 	PreLoadPrep();
 
-	if (!LoadInternalStructuresState(components, error))
+	if (!LoadInternalStructuresState(directory, error))
 	{
 		if (!error->IsValid())
 			Error::SetString(error, "Save state corruption in internal structures.");
@@ -1130,7 +1131,7 @@ bool SaveState_LoadFromDirectory(const std::string& directory, Error* error)
 	{
 		std::optional<std::vector<u8>> data;
 		if (entry_present[i])
-			data = FileSystem::ReadBinaryFile(Path::Combine(components, SavestateEntries[i]->GetFilename()).c_str());
+			data = FileSystem::ReadBinaryFile(Path::Combine(directory, SavestateEntries[i]->GetFilename()).c_str());
 		if ((entry_present[i] && !data.has_value()) || !SavestateEntries[i]->FreezeIn(data))
 		{
 			Error::SetString(error, fmt::format("Save state corruption in {}.", SavestateEntries[i]->GetFilename()));

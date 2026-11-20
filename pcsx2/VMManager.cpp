@@ -2254,9 +2254,25 @@ void VMManager::UpdateSaveStateGSDumpPaths(const std::string& source, const std:
 	}
 }
 
+// A savestate's screenshot sits beside its directory, so it moves and goes with it.
+static bool MoveSaveStateScreenshot(const std::string& from, const std::string& to)
+{
+	const std::string source = SaveState_GetScreenshotPath(from);
+	const std::string destination = SaveState_GetScreenshotPath(to);
+	if (FileSystem::FileExists(destination.c_str()) && !FileSystem::DeleteFilePath(destination.c_str()))
+		return false;
+	return !FileSystem::FileExists(source.c_str()) || FileSystem::RenamePath(source.c_str(), destination.c_str());
+}
+
+static bool DeleteSaveStateScreenshot(const std::string& directory)
+{
+	const std::string path = SaveState_GetScreenshotPath(directory);
+	return !FileSystem::FileExists(path.c_str()) || FileSystem::DeleteFilePath(path.c_str());
+}
+
 static bool WriteSaveStateGSDump(const std::string& directory, const std::vector<u8>& data)
 {
-	const std::string filename = Path::Combine(SaveState_GetComponentDirectory(directory), "GS.gs.zst");
+	const std::string filename = Path::Combine(directory, "GS.gs.zst");
 	const std::string temporary_filename = filename + ".tmp";
 	ScopedGuard cleanup([&temporary_filename]() { FileSystem::DeleteFilePath(temporary_filename.c_str()); });
 	FILE* fp = FileSystem::OpenCFile(temporary_filename.c_str(), "wb");
@@ -2352,7 +2368,8 @@ void VMManager::DoSaveState(const char* filename, s32 slot_for_message, bool sav
 			if (backed_up)
 			{
 				UpdateSaveStateGSDumpPaths(backup_filename, {});
-				backed_up = FileSystem::RenamePath(filename, backup_filename.c_str());
+				backed_up = FileSystem::RenamePath(filename, backup_filename.c_str()) &&
+				            MoveSaveStateScreenshot(filename, backup_filename);
 			}
 			if (!backed_up)
 			{
@@ -2363,7 +2380,7 @@ void VMManager::DoSaveState(const char* filename, s32 slot_for_message, bool sav
 			}
 			UpdateSaveStateGSDumpPaths(filename, backup_filename);
 		}
-		else if (!FileSystem::RecursiveDeleteDirectory(filename))
+		else if (!FileSystem::RecursiveDeleteDirectory(filename) || !DeleteSaveStateScreenshot(filename))
 		{
 			error_callback(fmt::format(
 				TRANSLATE_FS("VMManager", "Cannot replace old save state '{}'."),
@@ -2480,7 +2497,7 @@ bool VMManager::DeleteStateFromSlot(s32 slot, Error* error)
 		return false;
 	}
 
-	if (!FileSystem::RecursiveDeleteDirectory(filename.c_str()))
+	if (!FileSystem::RecursiveDeleteDirectory(filename.c_str()) || !DeleteSaveStateScreenshot(filename))
 	{
 		Error::SetString(error, TRANSLATE_STR("VMManager", "Failed to delete the save state directory."));
 		return false;
@@ -2961,7 +2978,7 @@ bool VMManager::IsSaveStatePath(const std::string_view path)
 {
 	const std::string directory(path);
 	return FileSystem::DirectoryExists(directory.c_str()) &&
-	       FileSystem::FileExists(Path::Combine(SaveState_GetComponentDirectory(directory), "PCSX2 Savestate Version.id").c_str());
+	       FileSystem::FileExists(Path::Combine(directory, "PCSX2 Savestate Version.id").c_str());
 }
 
 bool VMManager::IsDiscFileName(const std::string_view path)

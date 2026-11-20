@@ -205,6 +205,9 @@ static void BackupInputRecordingSaveState(const std::string& source)
 					 file.FileName.c_str(), Path::Combine(destination, Path::GetFileName(file.FileName)).c_str(), true) &&
 		         copied;
 	}
+	const std::string screenshot = SaveState_GetScreenshotPath(source);
+	if (FileSystem::FileExists(screenshot.c_str()))
+		copied = FileSystem::CopyFilePath(screenshot.c_str(), SaveState_GetScreenshotPath(destination).c_str(), true) && copied;
 	if (copied)
 		VMManager::UpdateSaveStateGSDumpPaths(source, destination, true);
 }

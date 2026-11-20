@@ -377,6 +377,8 @@ private:
 	bool m_was_disc_change_request = false;
 	bool m_is_closing = false;
 	bool m_side_frame_margins_set = false;
+	// -no-side-frames: the visible left, right and bottom frame the client area covers, in physical pixels.
+	QMargins m_side_frame_margins;
 	bool m_is_temporarily_windowed = false;
 
 	QString m_last_fps_status;

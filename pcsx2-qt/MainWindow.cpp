@@ -3242,12 +3242,16 @@ void MainWindow::updateSideFrameMargins(bool remeasure)
 		return;
 	}
 
-	native->setCustomMargins(QMargins());
+	// Clear the margins and recalculate the standard frame before measuring it.
+	const HWND hwnd = reinterpret_cast<HWND>(winId());
+	static constexpr UINT FRAME_CHANGED = SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE;
+	m_side_frame_margins = QMargins();
 	m_side_frame_margins_set = false;
+	native->setCustomMargins(QMargins());
+	SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, FRAME_CHANGED);
 	if (isMaximized() || isFullScreen() || !isVisible())
 		return;
 
-	const HWND hwnd = reinterpret_cast<HWND>(winId());
 	RECT outer, client, frame;
 	if (!GetWindowRect(hwnd, &outer) || !GetClientRect(hwnd, &client) ||
 		FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame))) ||
@@ -3269,9 +3273,29 @@ void MainWindow::updateSideFrameMargins(bool remeasure)
 		return;
 	}
 
-	native->setCustomMargins(QMargins(-left, 0, -right, -bottom));
+	// The WM_NCCALCSIZE handler below extends the client area; Qt's custom margins tell Qt the same, so its own
+	// geometry and layout match the new client area.
+	m_side_frame_margins = QMargins(left, 0, right, bottom);
 	m_side_frame_margins_set = true;
-	Console.WriteLn(fmt::format("-no-side-frames: client area extended over the visible frame by {},{},{}.", left, right, bottom));
+	native->setCustomMargins(QMargins(-left, 0, -right, -bottom));
+	SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, FRAME_CHANGED);
+
+	// Report the outcome as measured: the client area against the visible frame on each side.
+	RECT applied_client, applied_frame;
+	GetClientRect(hwnd, &applied_client);
+	top_left = {applied_client.left, applied_client.top};
+	bottom_right = {applied_client.right, applied_client.bottom};
+	ClientToScreen(hwnd, &top_left);
+	ClientToScreen(hwnd, &bottom_right);
+	const bool have_frame =
+		SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &applied_frame, sizeof(applied_frame)));
+	const QMargins qt_margins = native->customMargins();
+	Console.WriteLn(fmt::format(
+		"-no-side-frames: extending by {},{},{}; client ({},{},{},{}), frame ({},{},{},{}), Qt margins {},{},{},{}.",
+		left, right, bottom, top_left.x, top_left.y, bottom_right.x, bottom_right.y,
+		have_frame ? applied_frame.left : 0, have_frame ? applied_frame.top : 0, have_frame ? applied_frame.right : 0,
+		have_frame ? applied_frame.bottom : 0, qt_margins.left(), qt_margins.top(), qt_margins.right(),
+		qt_margins.bottom()));
 }
 
 bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr* result)
@@ -3282,6 +3306,17 @@ bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr
 		const MSG* msg = static_cast<const MSG*>(message);
 		if (msg->message == WM_DPICHANGED && QtHost::ShouldHideSideFrames())
 			QTimer::singleShot(0, this, [this]() { updateSideFrameMargins(true); });
+
+		// -no-side-frames: keep the standard caption but extend the client area over the measured visible frame.
+		if (msg->message == WM_NCCALCSIZE && msg->wParam == TRUE && !m_side_frame_margins.isNull())
+		{
+			*result = DefWindowProcW(msg->hwnd, WM_NCCALCSIZE, msg->wParam, msg->lParam);
+			RECT& client = reinterpret_cast<NCCALCSIZE_PARAMS*>(msg->lParam)->rgrc[0];
+			client.left -= m_side_frame_margins.left();
+			client.right += m_side_frame_margins.right();
+			client.bottom += m_side_frame_margins.bottom();
+			return true;
+		}
 
 		if (msg->message == WM_DEVICECHANGE && msg->wParam == DBT_DEVNODES_CHANGED)
 		{

@@ -245,6 +245,9 @@ protected:
 #endif
 
 private:
+#ifdef _WIN32
+	void updateSideFrameMargins();
+#endif
 	void setupAdditionalUi();
 	void setupToolbarCustomization();
 	void populateToolbarActionsMenu();

@@ -3004,7 +3004,7 @@ void MainWindow::showEvent(QShowEvent* event)
 		m_game_list_widget->resizeTableViewColumnsToFit();
 
 #ifdef _WIN32
-	updateSideFrameMargins();
+	updateSideFrameMargins(true);
 #endif
 
 #ifdef ENABLE_RAINTEGRATION
@@ -3054,7 +3054,7 @@ void MainWindow::changeEvent(QEvent* event)
 
 #ifdef _WIN32
 	if (event->type() == QEvent::WindowStateChange && QtHost::ShouldHideSideFrames())
-		QTimer::singleShot(0, this, &MainWindow::updateSideFrameMargins);
+		QTimer::singleShot(0, this, [this]() { updateSideFrameMargins(true); });
 #endif
 }
 
@@ -3158,6 +3158,11 @@ void MainWindow::moveEvent(QMoveEvent* event)
 
 	if (g_log_window && g_log_window->isAttachedToMainWindow())
 		g_log_window->reattachToMainWindow();
+
+#ifdef _WIN32
+	if (QtHost::ShouldHideSideFrames() && !m_side_frame_margins_set)
+		QTimer::singleShot(0, this, [this]() { updateSideFrameMargins(false); });
+#endif
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
@@ -3166,6 +3171,11 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 
 	if (g_log_window && g_log_window->isAttachedToMainWindow())
 		g_log_window->reattachToMainWindow();
+
+#ifdef _WIN32
+	if (QtHost::ShouldHideSideFrames() && !m_side_frame_margins_set)
+		QTimer::singleShot(0, this, [this]() { updateSideFrameMargins(false); });
+#endif
 }
 
 void MainWindow::registerForDeviceNotifications()
@@ -3216,37 +3226,52 @@ namespace QNativeInterface::Private
 	};
 } // namespace QNativeInterface::Private
 
-void MainWindow::updateSideFrameMargins()
+void MainWindow::updateSideFrameMargins(bool remeasure)
 {
 	// -no-side-frames: the client area takes over the visible left, right and bottom frame, so the frame DWM
 	// reports equals the client area there; the invisible resize borders and the caption stay. Qt's custom margins
-	// keep its own geometry in step with the client area.
-	if (!QtHost::ShouldHideSideFrames())
+	// keep its own geometry in step with the client area. Until DWM can report the frame, every move or resize
+	// tries again.
+	if (!QtHost::ShouldHideSideFrames() || (m_side_frame_margins_set && !remeasure))
 		return;
 	QWindow* const window = windowHandle();
 	auto* const native = window ? window->nativeInterface<QNativeInterface::Private::QWindowsWindow>() : nullptr;
 	if (!native)
+	{
+		Console.Warning("-no-side-frames: Qt's Windows window interface is unavailable.");
 		return;
+	}
 
 	native->setCustomMargins(QMargins());
-	if (isMaximized() || isFullScreen())
+	m_side_frame_margins_set = false;
+	if (isMaximized() || isFullScreen() || !isVisible())
 		return;
 
 	const HWND hwnd = reinterpret_cast<HWND>(winId());
-	RECT client, frame;
-	if (!GetClientRect(hwnd, &client) ||
-		FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame))))
+	RECT outer, client, frame;
+	if (!GetWindowRect(hwnd, &outer) || !GetClientRect(hwnd, &client) ||
+		FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame))) ||
+		EqualRect(&outer, &frame))
 	{
+		DevCon.WriteLn("-no-side-frames: DWM cannot report the visible frame yet.");
 		return;
 	}
 	POINT top_left = {client.left, client.top};
 	POINT bottom_right = {client.right, client.bottom};
 	ClientToScreen(hwnd, &top_left);
 	ClientToScreen(hwnd, &bottom_right);
-	const int left = std::max<int>(top_left.x - frame.left, 0);
-	const int right = std::max<int>(frame.right - bottom_right.x, 0);
-	const int bottom = std::max<int>(frame.bottom - bottom_right.y, 0);
+	const int left = top_left.x - frame.left;
+	const int right = frame.right - bottom_right.x;
+	const int bottom = frame.bottom - bottom_right.y;
+	if (left < 0 || right < 0 || bottom < 0 || left > 16 || right > 16 || bottom > 16)
+	{
+		Console.Warning(fmt::format("-no-side-frames: unexpected visible frame {},{},{}.", left, right, bottom));
+		return;
+	}
+
 	native->setCustomMargins(QMargins(-left, 0, -right, -bottom));
+	m_side_frame_margins_set = true;
+	Console.WriteLn(fmt::format("-no-side-frames: client area extended over the visible frame by {},{},{}.", left, right, bottom));
 }
 
 bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr* result)
@@ -3256,7 +3281,7 @@ bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr
 	{
 		const MSG* msg = static_cast<const MSG*>(message);
 		if (msg->message == WM_DPICHANGED && QtHost::ShouldHideSideFrames())
-			QTimer::singleShot(0, this, &MainWindow::updateSideFrameMargins);
+			QTimer::singleShot(0, this, [this]() { updateSideFrameMargins(true); });
 
 		if (msg->message == WM_DEVICECHANGE && msg->wParam == DBT_DEVNODES_CHANGED)
 		{

@@ -246,7 +246,7 @@ protected:
 
 private:
 #ifdef _WIN32
-	void updateSideFrameMargins();
+	void updateSideFrameMargins(bool remeasure);
 #endif
 	void setupAdditionalUi();
 	void setupToolbarCustomization();
@@ -376,6 +376,7 @@ private:
 	bool m_was_paused_on_surface_loss = false;
 	bool m_was_disc_change_request = false;
 	bool m_is_closing = false;
+	bool m_side_frame_margins_set = false;
 	bool m_is_temporarily_windowed = false;
 
 	QString m_last_fps_status;

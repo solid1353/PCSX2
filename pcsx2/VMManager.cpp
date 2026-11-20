@@ -2256,7 +2256,7 @@ void VMManager::UpdateSaveStateGSDumpPaths(const std::string& source, const std:
 
 static bool WriteSaveStateGSDump(const std::string& directory, const std::vector<u8>& data)
 {
-	const std::string filename = Path::Combine(directory, "GS.gs.zst");
+	const std::string filename = Path::Combine(SaveState_GetComponentDirectory(directory), "GS.gs.zst");
 	const std::string temporary_filename = filename + ".tmp";
 	ScopedGuard cleanup([&temporary_filename]() { FileSystem::DeleteFilePath(temporary_filename.c_str()); });
 	FILE* fp = FileSystem::OpenCFile(temporary_filename.c_str(), "wb");
@@ -2961,7 +2961,7 @@ bool VMManager::IsSaveStatePath(const std::string_view path)
 {
 	const std::string directory(path);
 	return FileSystem::DirectoryExists(directory.c_str()) &&
-	       FileSystem::FileExists(Path::Combine(directory, "PCSX2 Savestate Version.id").c_str());
+	       FileSystem::FileExists(Path::Combine(SaveState_GetComponentDirectory(directory), "PCSX2 Savestate Version.id").c_str());
 }
 
 bool VMManager::IsDiscFileName(const std::string_view path)

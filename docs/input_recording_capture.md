@@ -212,8 +212,9 @@ With a capture directory, PNGs go directly in it and savestates in its
 directories but does not empty them; an existing savestate with the same
 name is replaced.
 
-Savestates are directories containing the state components and a
-`Screenshot.png`. In `full` mode the standalone PNG is the same encoded image
+Savestates are directories holding `Screenshot.png` and a `state`
+subdirectory with every other file: the version indicator, the state
+components and the GS dump below. In `full` mode the standalone PNG is the same encoded image
 as the savestate's `Screenshot.png`. If the memory card is busy, the savestate
 is skipped and logged, but a `full` capture still writes its PNG. Screenshots
 use the savestate screenshot encoder and size.
@@ -224,7 +225,7 @@ that starts each one and the GS data sent during it
 (`pcsx2/GS/GSState.cpp`). Every savestate, ordinary or recording capture,
 writes them as a GS dump that starts from the oldest kept state and ends on the
 last presented frame, the one in the savestate's screenshot. The Zstandard
-stream is saved as `GS.gs.zst` inside the savestate directory once the
+stream is saved as `state/GS.gs.zst` inside the savestate directory once the
 savestate is written successfully, whether or not emulation is paused. The
 configured GS dump compression does not affect these dumps.
 

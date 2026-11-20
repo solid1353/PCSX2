@@ -34,7 +34,7 @@ capture. See [scripted takes](capture_script.md).
 | `-input-recording-folder <path>` | Uses this InputRecordings folder for the process: hotkey saves, menu dialogs, and relative `-input-recording`/`-input-recording-create` paths. Relative folder paths resolve from the launch working directory. Missing folders and parents are created only when writing a recording. |
 | `-centered-window` | Sizes the game window to the presented image without borders, with its frame 768 pixels tall independent of display scaling, centers it on its screen, and suppresses starting fullscreen. The window follows later aspect-ratio changes. |
 | `-no-recenter` | Turns off the **Recenter Window On Aspect Change** setting for the run, so the window keeps the position it is given. `-centered-window` still applies. |
-| `-no-side-frames` | On Windows, the main window's content covers its visible left, right and bottom frame, so its visible frame (`DWMWA_EXTENDED_FRAME_BOUNDS`) equals its content on those sides and tiled windows meet with no frame between them. The title bar, its buttons and the invisible resize borders stay. Maximized and fullscreen windows are unaffected. |
+| `-no-side-frames` | On Windows, the main window has no left, right or bottom frame: its content reaches its window edges, which equal its visible frame (`DWMWA_EXTENDED_FRAME_BOUNDS`), so tiled windows meet with no frame between them. The title bar and its buttons stay; those three edges no longer resize the window or cast a shadow. Maximized and fullscreen windows are unaffected. |
 
 For `-setting`, the section is everything before the last `/` before the first
 `=`, and the key is the remaining part before `=`. Both must be non-empty.

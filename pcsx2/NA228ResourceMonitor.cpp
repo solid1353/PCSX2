@@ -44,13 +44,22 @@ namespace NA228ResourceMonitor
 		std::span<const uint8_t> m_ram;
 	};
 
+	// Slot 2 of the ELF's PRG loader destination table. An NA228 build stores 228.BIN's load address there;
+	// retail NA2 has zero.
+	static constexpr uint32_t PAYLOAD_ADDRESS_SLOT = 0x006029c8;
+
 	static bool Detect(const Memory& memory)
 	{
-		uint32_t magic, load_address, name_start, name_end;
-		return memory.Read32(0x008f3d00, magic) && magic == 0x336f574d &&
-		       memory.Read32(0x008f3d08, load_address) && load_address == 0x008f3d00 &&
-		       memory.Read32(0x008f3d20, name_start) && name_start == 0x2e383232 &&
-		       memory.Read32(0x008f3d24, name_end) && name_end == 0x006e6962;
+		uint32_t base, magic, load_address, name_start, name_end;
+		if (!memory.Read32(PAYLOAD_ADDRESS_SLOT, base) || base == 0)
+			return false;
+
+		// 228.BIN's header: magic, its own load address at +8, and "228.bin" at +0x20.
+		base &= PHYSICAL_MASK;
+		return memory.Read32(base, magic) && magic == 0x336f574d &&
+		       memory.Read32(base + 0x08, load_address) && (load_address & PHYSICAL_MASK) == base &&
+		       memory.Read32(base + 0x20, name_start) && name_start == 0x2e383232 &&
+		       memory.Read32(base + 0x24, name_end) && name_end == 0x006e6962;
 	}
 
 	bool Detect(std::span<const uint8_t> ram)

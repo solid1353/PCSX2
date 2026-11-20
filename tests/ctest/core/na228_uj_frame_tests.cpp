@@ -27,10 +27,11 @@ namespace
 
 		void SetUp() override
 		{
-			Write(0x8f3d00, 0x336f574d);
-			Write(0x8f3d08, 0x008f3d00);
-			Write(0x8f3d20, 0x2e383232);
-			Write(0x8f3d24, 0x006e6962);
+			Write(0x6029c8, 0x008dd080);
+			Write(0x8dd080, 0x336f574d);
+			Write(0x8dd088, 0x008dd080);
+			Write(0x8dd0a0, 0x2e383232);
+			Write(0x8dd0a4, 0x006e6962);
 			Write(0x00607714, OWNER);
 			Write(OWNER + 0x04, CONTAINER);
 			Write(OWNER + 0x3c, SKILL, 2);
@@ -69,7 +70,7 @@ namespace
 
 	TEST_F(NA228UJFrameTest, ShowsNothingOutsideNA228)
 	{
-		Write(0x8f3d00, 0);
+		Write(0x8dd080, 0);
 		EXPECT_EQ(Format(), "");
 	}
 

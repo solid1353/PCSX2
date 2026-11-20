@@ -16,6 +16,8 @@ namespace
 	protected:
 		static constexpr uint32_t DESCRIPTOR = 0x1000;
 		static constexpr uint32_t BACKING = 0x2000;
+		static constexpr uint32_t PAYLOAD_ADDRESS_SLOT = 0x6029c8;
+		static constexpr uint32_t PAYLOAD = 0x8dd080;
 		std::vector<uint8_t> ram = std::vector<uint8_t>(EE_RAM_SIZE);
 		History history;
 
@@ -27,10 +29,11 @@ namespace
 
 		void SetUp() override
 		{
-			Write32(0x8f3d00, 0x336f574d);
-			Write32(0x8f3d08, 0x008f3d00);
-			Write32(0x8f3d20, 0x2e383232);
-			Write32(0x8f3d24, 0x006e6962);
+			Write32(PAYLOAD_ADDRESS_SLOT, PAYLOAD);
+			Write32(PAYLOAD, 0x336f574d);
+			Write32(PAYLOAD + 0x08, PAYLOAD);
+			Write32(PAYLOAD + 0x20, 0x2e383232);
+			Write32(PAYLOAD + 0x24, 0x006e6962);
 			Write32(0x607388, 3 * 1024 * 1024);
 			Write32(0x60738c, 4 * 1024 * 1024);
 			Write32(0x607390, 123);
@@ -68,24 +71,46 @@ namespace
 	TEST_F(NA228MonitorTest, DetectsOnlyCompleteHeaderAndTerminatedName)
 	{
 		EXPECT_TRUE(Detect(ram));
-		for (uint32_t address : {0x8f3d00u, 0x8f3d01u, 0x8f3d02u, 0x8f3d03u,
-				 0x8f3d08u, 0x8f3d09u, 0x8f3d0au, 0x8f3d0bu,
-				 0x8f3d20u, 0x8f3d21u, 0x8f3d22u, 0x8f3d23u,
-				 0x8f3d24u, 0x8f3d25u, 0x8f3d26u, 0x8f3d27u})
+		std::vector<uint32_t> addresses;
+		for (uint32_t i = 0; i < 4; i++)
+		{
+			for (uint32_t field : {PAYLOAD_ADDRESS_SLOT, PAYLOAD, PAYLOAD + 0x08, PAYLOAD + 0x20, PAYLOAD + 0x24})
+				addresses.push_back(field + i);
+		}
+		for (uint32_t address : addresses)
 		{
 			ram[address] ^= 1;
 			EXPECT_FALSE(Detect(ram)) << address;
 			ram[address] ^= 1;
 		}
-		ram[0x8f3d28] = 'x';
+		ram[PAYLOAD + 0x28] = 'x';
 		EXPECT_TRUE(Detect(ram));
+	}
+
+	TEST_F(NA228MonitorTest, FindsHeaderThroughLoaderSlotAtAnyAddress)
+	{
+		// Retail NA2 leaves the slot zero, even if a matching header happens to be in memory.
+		Write32(PAYLOAD_ADDRESS_SLOT, 0);
+		EXPECT_FALSE(Detect(ram));
+
+		// A kernel-segment load address is read physically and must match the header's own.
+		static constexpr uint32_t moved = 0x900000;
+		Write32(PAYLOAD_ADDRESS_SLOT, 0x80000000 | moved);
+		Write32(moved, 0x336f574d);
+		Write32(moved + 0x08, 0x80000000 | moved);
+		Write32(moved + 0x20, 0x2e383232);
+		Write32(moved + 0x24, 0x006e6962);
+		EXPECT_TRUE(Detect(ram));
+
+		Write32(PAYLOAD_ADDRESS_SLOT, static_cast<uint32_t>(ram.size()) - 0x10);
+		EXPECT_FALSE(Detect(ram));
 	}
 
 	TEST_F(NA228MonitorTest, RejectsAbsentAndTruncatedMemory)
 	{
 		EXPECT_FALSE(Detect({}));
-		EXPECT_FALSE(Detect(std::span(ram).first(0x8f3d27)));
-		EXPECT_TRUE(Detect(std::span(ram).first(0x8f3d28)));
+		EXPECT_FALSE(Detect(std::span(ram).first(PAYLOAD + 0x27)));
+		EXPECT_TRUE(Detect(std::span(ram).first(PAYLOAD + 0x28)));
 		EXPECT_FALSE(Sample({}, history).detected);
 		EXPECT_TRUE(Format(Sample({}, history)).empty());
 		EXPECT_FALSE(history.lowest_largest_gap.has_value());
@@ -434,7 +459,7 @@ namespace
 		const auto original = ram;
 		Sample(ram, history);
 		EXPECT_EQ(ram, original);
-		Write32(0x8f3d00, 0);
+		Write32(PAYLOAD, 0);
 		Write32(0x6073a4, 0);
 		SetBlock(BACKING, 0, true);
 		const auto snapshot = Sample(ram, history);

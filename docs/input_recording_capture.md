@@ -214,7 +214,10 @@ name is replaced.
 
 A savestate is a directory of state files, including the GS dump below, with
 its screenshot beside it as `<directory>.png`; backing up, replacing or
-deleting a slot moves or deletes the screenshot with it. In `full` mode the
+deleting a slot moves or deletes the screenshot with it. A slot backup in the
+savestates folder's `backups/` is stamped with the time it was made; when
+PCSX2 starts with no other PCSX2 running, it moves backups made over 7 days
+ago, with their screenshots, to the trash (`pcsx2-qt/QtHost.cpp`). In `full` mode the
 standalone PNG is the same encoded image as the savestate's screenshot. If the memory card is busy, the savestate
 is skipped and logged, but a `full` capture still writes its PNG. Screenshots
 use the savestate screenshot encoder and size.

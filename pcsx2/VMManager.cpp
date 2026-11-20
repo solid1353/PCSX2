@@ -64,6 +64,7 @@
 #include "fmt/format.h"
 
 #include <atomic>
+#include <filesystem>
 #include <mutex>
 #include <sstream>
 #include <common/RedtapeWilCom.h>
@@ -2270,6 +2271,21 @@ static bool DeleteSaveStateScreenshot(const std::string& directory)
 	return !FileSystem::FileExists(path.c_str()) || FileSystem::DeleteFilePath(path.c_str());
 }
 
+// A renamed folder keeps its old date, so a backup is stamped with the time it was made; startup cleanup ages
+// backups from that stamp.
+static void StampSaveStateBackup(const std::string& directory)
+{
+	const auto to_path = [](const std::string& path) {
+		return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(path.data()), path.size()));
+	};
+	const auto now = std::filesystem::file_time_type::clock::now();
+	std::error_code error;
+	std::filesystem::last_write_time(to_path(directory), now, error);
+	const std::string screenshot = SaveState_GetScreenshotPath(directory);
+	if (FileSystem::FileExists(screenshot.c_str()))
+		std::filesystem::last_write_time(to_path(screenshot), now, error);
+}
+
 static bool WriteSaveStateGSDump(const std::string& directory, const std::vector<u8>& data)
 {
 	const std::string filename = Path::Combine(directory, "GS.gs.zst");
@@ -2370,6 +2386,8 @@ void VMManager::DoSaveState(const char* filename, s32 slot_for_message, bool sav
 				UpdateSaveStateGSDumpPaths(backup_filename, {});
 				backed_up = FileSystem::RenamePath(filename, backup_filename.c_str()) &&
 				            MoveSaveStateScreenshot(filename, backup_filename);
+				if (backed_up)
+					StampSaveStateBackup(backup_filename);
 			}
 			if (!backed_up)
 			{

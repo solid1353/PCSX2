@@ -34,6 +34,7 @@
 #include "pcsx2/Patch.h"
 #include "pcsx2/Recording/InputRecording.h"
 #include "pcsx2/Recording/CaptureScript.h"
+#include "pcsx2/SaveState.h"
 #include "pcsx2/SIO/Sio.h"
 #include "pcsx2/SPU2/spu2.h"
 #include "pcsx2/VMManager.h"
@@ -50,6 +51,7 @@
 #include "common/Timer.h"
 
 #include <QtCore/QDir>
+#include <QtCore/QFile>
 #include <QtCore/QTimer>
 #include <QtCore/QFileInfo>
 #include <QtWidgets/QApplication>
@@ -62,7 +64,17 @@
 
 #include <cmath>
 #include <csignal>
+#include <ctime>
 #include <limits>
+
+#ifdef _WIN32
+#include "common/RedtapeWindows.h"
+#include <tlhelp32.h>
+#elif defined(__APPLE__)
+#include <libproc.h>
+#include <strings.h>
+#include <unistd.h>
+#endif
 
 static constexpr u32 SETTINGS_SAVE_DELAY = 1000;
 static constexpr const char* RUNTIME_RESOURCES_URL =
@@ -3117,6 +3129,68 @@ public:
 	}
 };
 
+// Whether another PCSX2 process is running; true where that cannot be told.
+static bool IsAnotherPCSX2Running()
+{
+#ifdef _WIN32
+	const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if (snapshot == INVALID_HANDLE_VALUE)
+		return true;
+	const DWORD own_pid = GetCurrentProcessId();
+	PROCESSENTRY32W entry = {};
+	entry.dwSize = sizeof(entry);
+	bool found = false;
+	for (BOOL valid = Process32FirstW(snapshot, &entry); valid && !found; valid = Process32NextW(snapshot, &entry))
+		found = entry.th32ProcessID != own_pid && _wcsnicmp(entry.szExeFile, L"pcsx2", 5) == 0;
+	CloseHandle(snapshot);
+	return found;
+#elif defined(__APPLE__)
+	const int count = proc_listallpids(nullptr, 0);
+	if (count <= 0)
+		return true;
+	std::vector<pid_t> pids(static_cast<size_t>(count) * 2);
+	const int listed = proc_listallpids(pids.data(), static_cast<int>(pids.size() * sizeof(pid_t)));
+	if (listed <= 0)
+		return true;
+	for (int i = 0; i < listed; i++)
+	{
+		char name[256] = {};
+		if (pids[i] != getpid() && proc_name(pids[i], name, sizeof(name)) > 0 && strncasecmp(name, "pcsx2", 5) == 0)
+			return true;
+	}
+	return false;
+#else
+	return true;
+#endif
+}
+
+// Moves savestate backups made over a week ago, with their screenshots, to the trash. It waits while another
+// PCSX2 runs, so no open session loses the backups it made.
+static void TrashOldSaveStateBackups()
+{
+	static constexpr std::time_t MAX_BACKUP_AGE = 7 * 24 * 60 * 60;
+	const std::string directory = Path::Combine(EmuFolders::Savestates, "backups");
+	if (!FileSystem::DirectoryExists(directory.c_str()) || IsAnotherPCSX2Running())
+		return;
+
+	FileSystem::FindResultsArray backups;
+	FileSystem::FindFiles(directory.c_str(), "*.backup", FILESYSTEM_FIND_FOLDERS | FILESYSTEM_FIND_HIDDEN_FILES, &backups);
+	const std::time_t cutoff = std::time(nullptr) - MAX_BACKUP_AGE;
+	for (const FILESYSTEM_FIND_DATA& backup : backups)
+	{
+		if (backup.ModificationTime >= cutoff)
+			continue;
+		const std::string screenshot = SaveState_GetScreenshotPath(backup.FileName);
+		if (!QFile::moveToTrash(QString::fromStdString(backup.FileName)))
+		{
+			Console.Warning(fmt::format("Could not move old savestate backup '{}' to the trash.", backup.FileName));
+			continue;
+		}
+		if (FileSystem::FileExists(screenshot.c_str()) && !QFile::moveToTrash(QString::fromStdString(screenshot)))
+			Console.Warning(fmt::format("Could not move old savestate backup screenshot '{}' to the trash.", screenshot));
+	}
+}
+
 int main(int argc, char* argv[])
 {
 	CrashHandler::Install();
@@ -3155,6 +3229,8 @@ int main(int argc, char* argv[])
 	// Remove any previous-version remanants.
 	if (s_cleanup_after_update)
 		AutoUpdaterDialog::cleanupAfterUpdate();
+
+	TrashOldSaveStateBackups();
 
 	// Set theme before creating any windows.
 	QtHost::UpdateApplicationTheme();

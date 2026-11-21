@@ -78,6 +78,12 @@ Ordinary screenshots save the current frame immediately while paused.
 
 Video capture draws each frame into a temporary target before reading it back,
 even at the frame's own size (`pcsx2/GS/Renderers/Common/GSRenderer.cpp`).
+With an NVENC encoder (`*_nvenc`) under the Direct3D 12 renderer, frames skip
+the readback: the renderer copies each one into a texture it shares with a
+Direct3D 11 device on the same GPU, which draws it into the encoder's own BGRA
+frames, with shared fences keeping every frame in order. The capture format
+setting then has no effect. Other encoders and renderers read frames back
+(`pcsx2/GS/GSCapture.cpp`).
 
 Standalone GS dumps use the `[Folders]` `GSDumps` directory, defaulting to
 `gs_dumps` beneath the data root. Their companion screenshots use `Snapshots`.

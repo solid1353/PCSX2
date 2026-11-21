@@ -229,6 +229,12 @@ private:
 	ComPtr<D3D12MA::Allocator> m_allocator;
 
 	ComPtr<ID3D12Fence> m_fence;
+
+	// Video capture shared textures and fences (CreateCaptureSharedTextures).
+	std::vector<ComPtr<ID3D12Resource>> m_capture_textures;
+	ComPtr<ID3D12Fence> m_capture_ready_fence;
+	ComPtr<ID3D12Fence> m_capture_free_fence;
+	u64 m_capture_ready_value = 0;
 	HANDLE m_fence_event = {};
 	u32 m_current_fence_value = 0;
 	u64 m_completed_fence_value = 0;
@@ -593,6 +599,15 @@ public:
 	void UploadHWDrawVerticesAndIndices(GSHWDrawConfig& config);
 
 public:
+	/// Video capture: shared textures and fences that a hardware encoder's D3D11 device opens, so frames reach it
+	/// without a readback. The handles are NT handles the caller closes.
+	bool CreateCaptureSharedTextures(u32 count, u32 width, u32 height, std::vector<HANDLE>* textures,
+		HANDLE* ready_fence, HANDLE* free_fence);
+	void DestroyCaptureSharedTextures();
+	/// Copies src into shared texture `index` once the encoder has signalled `free_value` on the free fence, submits
+	/// the command list, and returns the ready fence value the encoder waits for before reading the texture.
+	u64 CopyToCaptureSharedTexture(GSTexture* src, u32 index, u64 free_value);
+
 	/// Ends any render pass, executes the command buffer, and invalidates cached state.
 	void ExecuteCommandList(bool wait_for_completion);
 	void ExecuteCommandList(bool wait_for_completion, const char* reason, ...);

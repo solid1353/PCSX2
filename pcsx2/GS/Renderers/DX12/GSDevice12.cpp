@@ -1016,6 +1016,7 @@ void GSDevice12::Destroy()
 		ExecuteCommandList(true);
 	}
 
+	DestroyCaptureSharedTextures();
 	DestroySwapChain();
 	DestroyResources();
 }
@@ -3482,6 +3483,127 @@ GSDevice12::WaitType GSDevice12::GetWaitType(bool wait, bool spin)
 		return WaitType::Spin;
 	else
 		return WaitType::Sleep;
+}
+
+bool GSDevice12::CreateCaptureSharedTextures(u32 count, u32 width, u32 height, std::vector<HANDLE>* textures,
+	HANDLE* ready_fence, HANDLE* free_fence)
+{
+	DestroyCaptureSharedTextures();
+
+	const auto fail = [this, textures, ready_fence, free_fence](const char* what, HRESULT hr) {
+		Console.Error("D3D12: Capture shared resources: %s failed: %08X", what, static_cast<unsigned>(hr));
+		for (HANDLE handle : *textures)
+			CloseHandle(handle);
+		textures->clear();
+		if (*ready_fence)
+			CloseHandle(*ready_fence);
+		if (*free_fence)
+			CloseHandle(*free_fence);
+		*ready_fence = nullptr;
+		*free_fence = nullptr;
+		DestroyCaptureSharedTextures();
+		return false;
+	};
+
+	textures->clear();
+	*ready_fence = nullptr;
+	*free_fence = nullptr;
+
+	D3D12_HEAP_PROPERTIES heap = {};
+	heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+	D3D12_RESOURCE_DESC desc = {};
+	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	desc.Width = width;
+	desc.Height = height;
+	desc.DepthOrArraySize = 1;
+	desc.MipLevels = 1;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.SampleDesc.Count = 1;
+	desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	for (u32 i = 0; i < count; i++)
+	{
+		ComPtr<ID3D12Resource> texture;
+		HRESULT hr = m_device->CreateCommittedResource(
+			&heap, D3D12_HEAP_FLAG_SHARED, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(texture.put()));
+		if (FAILED(hr))
+			return fail("CreateCommittedResource", hr);
+		HANDLE handle = nullptr;
+		hr = m_device->CreateSharedHandle(texture.get(), nullptr, GENERIC_ALL, nullptr, &handle);
+		if (FAILED(hr))
+			return fail("CreateSharedHandle (texture)", hr);
+		textures->push_back(handle);
+		m_capture_textures.push_back(std::move(texture));
+	}
+
+	HRESULT hr = m_device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(m_capture_ready_fence.put()));
+	if (SUCCEEDED(hr))
+		hr = m_device->CreateFence(0, D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(m_capture_free_fence.put()));
+	if (FAILED(hr))
+		return fail("CreateFence", hr);
+	hr = m_device->CreateSharedHandle(m_capture_ready_fence.get(), nullptr, GENERIC_ALL, nullptr, ready_fence);
+	if (SUCCEEDED(hr))
+		hr = m_device->CreateSharedHandle(m_capture_free_fence.get(), nullptr, GENERIC_ALL, nullptr, free_fence);
+	if (FAILED(hr))
+		return fail("CreateSharedHandle (fence)", hr);
+
+	m_capture_ready_value = 0;
+	return true;
+}
+
+void GSDevice12::DestroyCaptureSharedTextures()
+{
+	if (m_capture_textures.empty() && !m_capture_ready_fence && !m_capture_free_fence)
+		return;
+
+	// Copies into the shared textures may still be in flight.
+	if (GetCommandList().list4)
+		WaitForGPUIdle();
+	m_capture_textures.clear();
+	m_capture_ready_fence.reset();
+	m_capture_free_fence.reset();
+	m_capture_ready_value = 0;
+}
+
+u64 GSDevice12::CopyToCaptureSharedTexture(GSTexture* src, u32 index, u64 free_value)
+{
+	GSTexture12* const src12 = static_cast<GSTexture12*>(src);
+	ID3D12Resource* const dst = m_capture_textures[index].get();
+	const D3D12_RESOURCE_DESC dst_desc = dst->GetDesc();
+
+	EndRenderPass();
+	src12->CommitClear();
+	src12->TransitionToState(GSTexture12::ResourceState::CopySrc);
+
+	// The shared texture rests in COMMON between uses, as the encoder's device expects it.
+	const D3D12CommandList& cmdlist = GetCommandList();
+	D3D12_RESOURCE_BARRIER barrier = {};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = dst;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+	cmdlist.list4->ResourceBarrier(1, &barrier);
+
+	D3D12_TEXTURE_COPY_LOCATION dst_location = {};
+	dst_location.pResource = dst;
+	dst_location.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+	D3D12_TEXTURE_COPY_LOCATION src_location = {};
+	src_location.pResource = src12->GetResource();
+	src_location.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+	const D3D12_BOX box = {0, 0, 0, std::min<UINT>(static_cast<UINT>(src->GetWidth()), static_cast<UINT>(dst_desc.Width)),
+		std::min<UINT>(static_cast<UINT>(src->GetHeight()), dst_desc.Height), 1};
+	cmdlist.list4->CopyTextureRegion(&dst_location, 0, 0, 0, &src_location, &box);
+
+	std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
+	cmdlist.list4->ResourceBarrier(1, &barrier);
+
+	// The encoder must have finished reading this texture's previous frame before the copy runs.
+	if (free_value != 0)
+		m_command_queue->Wait(m_capture_free_fence.get(), free_value);
+	ExecuteCommandList(false);
+	m_command_queue->Signal(m_capture_ready_fence.get(), ++m_capture_ready_value);
+	return m_capture_ready_value;
 }
 
 void GSDevice12::ExecuteCommandList(bool wait_for_completion)

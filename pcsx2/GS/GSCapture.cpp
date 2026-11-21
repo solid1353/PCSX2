@@ -36,6 +36,13 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
+#ifdef _WIN32
+// Before FFmpeg's D3D11 header, which includes d3d11.h inside its extern "C" block.
+#include "common/RedtapeWindows.h"
+#include <d3d11_4.h>
+#include <dxgi1_4.h>
+#endif
+
 extern "C" {
 #include "libavcodec/avcodec.h"
 #include "libavcodec/version.h"
@@ -50,7 +57,16 @@ extern "C" {
 #include "libswscale/version.h"
 #include "libswresample/swresample.h"
 #include "libswresample/version.h"
+#ifdef _WIN32
+#include "libavutil/hwcontext.h"
+#include "libavutil/hwcontext_d3d11va.h"
+#endif
 }
+
+#ifdef _WIN32
+#include "GS/Renderers/DX11/D3D.h"
+#include "GS/Renderers/DX12/GSDevice12.h"
+#endif
 
 // Compatibility with both ffmpeg 4.x and 5.x.
 #if (LIBAVFORMAT_VERSION_MAJOR < 59)
@@ -119,6 +135,9 @@ extern "C" {
 	X(av_hwframe_ctx_init) \
 	X(av_hwframe_transfer_data) \
 	X(av_hwframe_get_buffer) \
+	X(av_hwdevice_ctx_alloc) \
+	X(av_hwdevice_ctx_init) \
+	X(av_frame_unref) \
 	X(av_buffer_ref) \
 	X(av_buffer_unref) \
 	X(av_get_pix_fmt_name)
@@ -154,7 +173,41 @@ namespace GSCapture
 		std::unique_ptr<GSDownloadTexture> tex;
 		s64 pts;
 		State state;
+		// GPU frames: the ready fence value after which the frame's shared texture holds it.
+		u64 ready_value;
 	};
+
+#ifdef _WIN32
+	// Frames for an NVENC encoder under the D3D12 renderer stay on the GPU: the renderer copies each one into a
+	// texture it shares with this D3D11 device, which draws it into the encoder's own D3D11 frames. Shared fences
+	// order the two devices. Encoder frames are BGRA, the only 8-bit RGB layout FFmpeg's D3D11 frames take.
+	struct GpuFrames
+	{
+		template <typename T>
+		using ComPtr = wil::com_ptr_nothrow<T>;
+
+		ComPtr<ID3D11Device5> device;
+		ComPtr<ID3D11DeviceContext4> context;
+		ComPtr<ID3D11VertexShader> vertex_shader;
+		ComPtr<ID3D11PixelShader> pixel_shader;
+
+		// Shared with the renderer's current D3D12 device; rebuilt when that device changes.
+		GSDevice12* renderer = nullptr;
+		std::vector<ComPtr<ID3D11ShaderResourceView>> views;
+		ComPtr<ID3D11Fence> ready_fence;
+		ComPtr<ID3D11Fence> free_fence;
+		u64 free_value = 0;
+		std::array<u64, MAX_PENDING_FRAMES> slot_free_values = {};
+
+		// Render target views of the encoder frame textures, by texture and array slice.
+		std::vector<std::pair<std::pair<ID3D11Texture2D*, UINT>, ComPtr<ID3D11RenderTargetView>>> targets;
+	};
+	static std::unique_ptr<GpuFrames> s_gpu_frames;
+	static bool BeginGpuFrames(const AVCodec* vcodec);
+	static bool ShareGpuFrameTextures();
+	static void ReleaseGpuFrameTextures();
+	static bool SendGpuFrame(const PendingFrame& pf, u32 slot);
+#endif
 
 	static void LogAVError(int errnum, const char* format, ...);
 	static bool LoadFFmpeg(bool report_errors);
@@ -512,6 +565,12 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 				return false;
 			}
 		}
+
+#ifdef _WIN32
+		// NVENC under the D3D12 renderer takes its frames on the GPU instead of through a readback.
+		if (BeginGpuFrames(vcodec))
+			hwconfig = nullptr;
+#endif
 
 		if (hwconfig)
 		{
@@ -887,6 +946,27 @@ bool GSCapture::DeliverVideoFrame(GSTexture* stex)
 		s_frame_encoded_cv.wait(lock, [&pf]() { return pf.state == PendingFrame::State::Unused; });
 	}
 
+#ifdef _WIN32
+	if (s_gpu_frames)
+	{
+		// The renderer copies the frame into this slot's shared texture on the GPU; the encoder thread draws it
+		// into an encoder frame once the copy's fence is reached.
+		const u32 slot = s_pending_frames_pos;
+		if (!ShareGpuFrameTextures())
+		{
+			s_encoding_error = true;
+			return false;
+		}
+		pf.ready_value = s_gpu_frames->renderer->CopyToCaptureSharedTexture(stex, slot, s_gpu_frames->slot_free_values[slot]);
+		pf.pts = s_next_video_pts++;
+		pf.state = PendingFrame::State::NeedsEncoding;
+		s_pending_frames_pos = (s_pending_frames_pos + 1) % MAX_PENDING_FRAMES;
+		s_frames_pending_encode++;
+		s_frame_ready_cv.notify_one();
+		return true;
+	}
+#endif
+
 	if (!pf.tex || pf.tex->GetWidth() != static_cast<u32>(stex->GetWidth()) || pf.tex->GetHeight() != static_cast<u32>(stex->GetHeight()))
 	{
 		pf.tex.reset();
@@ -961,6 +1041,11 @@ void GSCapture::EncoderThreadEntryPoint()
 		bool okay = !s_encoding_error;
 
 		// If the frame failed to map, this will be false, and we'll just skip it.
+#ifdef _WIN32
+		if (okay && s_video_stream && s_gpu_frames)
+			okay = SendGpuFrame(pf, s_frames_encode_consume_pos);
+		else
+#endif
 		if (okay && s_video_stream)
 			okay = pf.tex->IsMapped() ? SendFrame(pf) : !s_recording_replay;
 
@@ -1005,6 +1090,281 @@ void GSCapture::StopEncoderThread(std::unique_lock<std::mutex>& lock)
 		lock.lock();
 	}
 }
+
+#ifdef _WIN32
+
+static GSDevice12* GetD3D12Renderer()
+{
+	return (g_gs_device && g_gs_device->GetRenderAPI() == RenderAPI::D3D12) ? static_cast<GSDevice12*>(g_gs_device.get()) :
+	                                                                          nullptr;
+}
+
+bool GSCapture::BeginGpuFrames(const AVCodec* vcodec)
+{
+	// Only NVENC is known to take BGRA frames in D3D11 textures; other encoders keep the readback path.
+	GSDevice12* const renderer = GetD3D12Renderer();
+	if (!renderer || !std::string_view(vcodec->name).ends_with("_nvenc"))
+		return false;
+	bool takes_d3d11_frames = false;
+	for (int i = 0; const AVCodecHWConfig* config = wrap_avcodec_get_hw_config(vcodec, i); i++)
+	{
+		takes_d3d11_frames |= (config->pix_fmt == AV_PIX_FMT_D3D11 &&
+							   (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_FRAMES_CTX));
+	}
+	if (!takes_d3d11_frames)
+		return false;
+
+	const auto fail = [](const char* what, HRESULT hr) {
+		Console.Warning("GSCapture: GPU frames unavailable, %s failed (%08X); using readback.", what, static_cast<unsigned>(hr));
+		return false;
+	};
+
+	// A D3D11 device on the renderer's adapter, for the encoder's frames.
+	auto gpu = std::make_unique<GpuFrames>();
+	GpuFrames::ComPtr<IDXGIFactory4> factory;
+	HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(factory.put()));
+	if (FAILED(hr))
+		return fail("CreateDXGIFactory1", hr);
+	GpuFrames::ComPtr<IDXGIAdapter> adapter;
+	hr = factory->EnumAdapterByLuid(renderer->GetDevice()->GetAdapterLuid(), IID_PPV_ARGS(adapter.put()));
+	if (FAILED(hr))
+		return fail("EnumAdapterByLuid", hr);
+	static constexpr D3D_FEATURE_LEVEL feature_levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
+	GpuFrames::ComPtr<ID3D11Device> device;
+	GpuFrames::ComPtr<ID3D11DeviceContext> context;
+	hr = D3D11CreateDevice(adapter.get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr,
+		D3D11_CREATE_DEVICE_VIDEO_SUPPORT | D3D11_CREATE_DEVICE_BGRA_SUPPORT, feature_levels,
+		static_cast<UINT>(std::size(feature_levels)), D3D11_SDK_VERSION, device.put(), nullptr, context.put());
+	if (FAILED(hr))
+		return fail("D3D11CreateDevice", hr);
+	gpu->device = device.try_query<ID3D11Device5>();
+	gpu->context = context.try_query<ID3D11DeviceContext4>();
+	if (!gpu->device || !gpu->context)
+		return fail("ID3D11Device5", E_NOINTERFACE);
+
+	// Draws a shared texture into an encoder frame; the BGRA render target swaps the channels.
+	static constexpr std::string_view copy_shader = R"(
+Texture2D<float4> source : register(t0);
+void vs_main(uint id : SV_VertexID, out float4 position : SV_Position)
+{
+	const float2 uv = float2((id << 1) & 2, id & 2);
+	position = float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+}
+float4 ps_main(float4 position : SV_Position) : SV_Target
+{
+	return source.Load(int3(position.xy, 0));
+}
+)";
+	const auto vs = D3D::CompileShader(D3D::ShaderType::Vertex, D3D::ShaderModel::SM50, false, copy_shader, nullptr, "vs_main");
+	const auto ps = D3D::CompileShader(D3D::ShaderType::Pixel, D3D::ShaderModel::SM50, false, copy_shader, nullptr, "ps_main");
+	if (!vs || !ps)
+		return fail("CompileShader", E_FAIL);
+	hr = gpu->device->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr, gpu->vertex_shader.put());
+	if (SUCCEEDED(hr))
+		hr = gpu->device->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), nullptr, gpu->pixel_shader.put());
+	if (FAILED(hr))
+		return fail("CreateShader", hr);
+
+	// The encoder's frames: BGRA D3D11 textures on that device, allocated as the encoder needs them.
+	AVBufferRef* device_ref = wrap_av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D11VA);
+	if (!device_ref)
+		return fail("av_hwdevice_ctx_alloc", E_OUTOFMEMORY);
+	AVD3D11VADeviceContext* const device_hw =
+		static_cast<AVD3D11VADeviceContext*>(reinterpret_cast<AVHWDeviceContext*>(device_ref->data)->hwctx);
+	device_hw->device = gpu->device.get();
+	device_hw->device->AddRef();
+	int res = wrap_av_hwdevice_ctx_init(device_ref);
+	if (res < 0)
+	{
+		LogAVError(res, "av_hwdevice_ctx_init() for GPU frames failed: ");
+		wrap_av_buffer_unref(&device_ref);
+		return false;
+	}
+	AVBufferRef* frames_ref = wrap_av_hwframe_ctx_alloc(device_ref);
+	if (!frames_ref)
+	{
+		wrap_av_buffer_unref(&device_ref);
+		return fail("av_hwframe_ctx_alloc", E_OUTOFMEMORY);
+	}
+	AVHWFramesContext* const frames = reinterpret_cast<AVHWFramesContext*>(frames_ref->data);
+	frames->format = AV_PIX_FMT_D3D11;
+	frames->sw_format = AV_PIX_FMT_BGRA;
+	frames->width = s_size.x;
+	frames->height = s_size.y;
+	frames->initial_pool_size = 0;
+	static_cast<AVD3D11VAFramesContext*>(frames->hwctx)->BindFlags = D3D11_BIND_RENDER_TARGET;
+	res = wrap_av_hwframe_ctx_init(frames_ref);
+	if (res < 0)
+	{
+		LogAVError(res, "av_hwframe_ctx_init() for GPU frames failed: ");
+		wrap_av_buffer_unref(&frames_ref);
+		wrap_av_buffer_unref(&device_ref);
+		return false;
+	}
+
+	s_video_hw_context = device_ref;
+	s_video_hw_frames = frames_ref;
+	s_video_codec_context->hw_frames_ctx = wrap_av_buffer_ref(s_video_hw_frames);
+	s_video_codec_context->pix_fmt = AV_PIX_FMT_D3D11;
+	s_gpu_frames = std::move(gpu);
+	Console.WriteLnFmt(Color_StrongGreen, "GSCapture: {} takes its frames on the GPU.", vcodec->name);
+	return true;
+}
+
+bool GSCapture::ShareGpuFrameTextures()
+{
+	GpuFrames& gpu = *s_gpu_frames;
+	GSDevice12* const renderer = GetD3D12Renderer();
+	if (gpu.renderer && gpu.renderer == renderer)
+		return true;
+
+	ReleaseGpuFrameTextures();
+	if (!renderer)
+	{
+		Console.Error("GSCapture: GPU frames need the Direct3D 12 renderer.");
+		return false;
+	}
+
+	std::vector<HANDLE> textures;
+	HANDLE ready_fence = nullptr, free_fence = nullptr;
+	if (!renderer->CreateCaptureSharedTextures(MAX_PENDING_FRAMES, s_size.x, s_size.y, &textures, &ready_fence, &free_fence))
+		return false;
+
+	bool okay = true;
+	for (HANDLE handle : textures)
+	{
+		GpuFrames::ComPtr<ID3D11Texture2D> texture;
+		GpuFrames::ComPtr<ID3D11ShaderResourceView> view;
+		okay = okay && SUCCEEDED(gpu.device->OpenSharedResource1(handle, IID_PPV_ARGS(texture.put()))) &&
+			   SUCCEEDED(gpu.device->CreateShaderResourceView(texture.get(), nullptr, view.put()));
+		gpu.views.push_back(std::move(view));
+		CloseHandle(handle);
+	}
+	okay = okay && SUCCEEDED(gpu.device->OpenSharedFence(ready_fence, IID_PPV_ARGS(gpu.ready_fence.put()))) &&
+		   SUCCEEDED(gpu.device->OpenSharedFence(free_fence, IID_PPV_ARGS(gpu.free_fence.put())));
+	CloseHandle(ready_fence);
+	CloseHandle(free_fence);
+	gpu.renderer = renderer;
+	if (!okay)
+	{
+		Console.Error("GSCapture: Failed to open the renderer's shared capture textures.");
+		ReleaseGpuFrameTextures();
+		return false;
+	}
+	return true;
+}
+
+void GSCapture::ReleaseGpuFrameTextures()
+{
+	GpuFrames& gpu = *s_gpu_frames;
+
+	// Let the encoder's device finish reading the shared textures first.
+	if (gpu.free_fence && gpu.free_value != 0 && gpu.free_fence->GetCompletedValue() < gpu.free_value)
+	{
+		const HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+		if (event && SUCCEEDED(gpu.free_fence->SetEventOnCompletion(gpu.free_value, event)))
+			WaitForSingleObject(event, 5000);
+		if (event)
+			CloseHandle(event);
+	}
+
+	gpu.views.clear();
+	gpu.ready_fence.reset();
+	gpu.free_fence.reset();
+	gpu.free_value = 0;
+	gpu.slot_free_values = {};
+	if (gpu.renderer && gpu.renderer == GetD3D12Renderer())
+		gpu.renderer->DestroyCaptureSharedTextures();
+	gpu.renderer = nullptr;
+}
+
+bool GSCapture::SendGpuFrame(const PendingFrame& pf, u32 slot)
+{
+	GpuFrames& gpu = *s_gpu_frames;
+	AVFrame* const frame = s_hw_video_frame;
+	wrap_av_frame_unref(frame);
+	int res = wrap_av_hwframe_get_buffer(s_video_hw_frames, frame, 0);
+	if (res < 0)
+	{
+		LogAVError(res, "av_hwframe_get_buffer() for a GPU frame failed: ");
+		return false;
+	}
+
+	ID3D11Texture2D* const texture = reinterpret_cast<ID3D11Texture2D*>(frame->data[0]);
+	const UINT index = static_cast<UINT>(reinterpret_cast<intptr_t>(frame->data[1]));
+	ID3D11RenderTargetView* target = nullptr;
+	for (const auto& [key, view] : gpu.targets)
+	{
+		if (key.first == texture && key.second == index)
+			target = view.get();
+	}
+	if (!target)
+	{
+		D3D11_TEXTURE2D_DESC desc;
+		texture->GetDesc(&desc);
+		D3D11_RENDER_TARGET_VIEW_DESC view_desc = {};
+		view_desc.Format = desc.Format;
+		if (desc.ArraySize > 1)
+		{
+			view_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+			view_desc.Texture2DArray.FirstArraySlice = index;
+			view_desc.Texture2DArray.ArraySize = 1;
+		}
+		else
+		{
+			view_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+		}
+		GpuFrames::ComPtr<ID3D11RenderTargetView> view;
+		const HRESULT hr = gpu.device->CreateRenderTargetView(texture, &view_desc, view.put());
+		if (FAILED(hr))
+		{
+			Console.Error("GSCapture: CreateRenderTargetView for a GPU frame failed: %08X", static_cast<unsigned>(hr));
+			return false;
+		}
+		target = view.get();
+		gpu.targets.emplace_back(std::make_pair(texture, index), std::move(view));
+	}
+
+	// Wait for the renderer's copy, draw the frame into the encoder's texture, and release the shared texture.
+	AVD3D11VADeviceContext* const device_hw = static_cast<AVD3D11VADeviceContext*>(
+		reinterpret_cast<AVHWDeviceContext*>(s_video_hw_context->data)->hwctx);
+	device_hw->lock(device_hw->lock_ctx);
+	ID3D11DeviceContext4* const context = gpu.context.get();
+	context->Wait(gpu.ready_fence.get(), pf.ready_value);
+	const D3D11_VIEWPORT viewport = {0.0f, 0.0f, static_cast<float>(s_size.x), static_cast<float>(s_size.y), 0.0f, 1.0f};
+	context->OMSetRenderTargets(1, &target, nullptr);
+	context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFFu);
+	context->OMSetDepthStencilState(nullptr, 0);
+	context->RSSetState(nullptr);
+	context->RSSetViewports(1, &viewport);
+	context->IASetInputLayout(nullptr);
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	context->VSSetShader(gpu.vertex_shader.get(), nullptr, 0);
+	context->PSSetShader(gpu.pixel_shader.get(), nullptr, 0);
+	ID3D11ShaderResourceView* const source = gpu.views[slot].get();
+	context->PSSetShaderResources(0, 1, &source);
+	context->Draw(3, 0);
+	ID3D11ShaderResourceView* const no_source = nullptr;
+	context->PSSetShaderResources(0, 1, &no_source);
+	context->OMSetRenderTargets(0, nullptr, nullptr);
+	context->Signal(gpu.free_fence.get(), ++gpu.free_value);
+	gpu.slot_free_values[slot] = gpu.free_value;
+	context->Flush();
+	device_hw->unlock(device_hw->lock_ctx);
+
+	frame->pts = pf.pts;
+	res = wrap_avcodec_send_frame(s_video_codec_context, frame);
+	wrap_av_frame_unref(frame);
+	if (res < 0)
+	{
+		LogAVError(res, "avcodec_send_frame() failed: ");
+		return false;
+	}
+
+	return ReceivePackets(s_video_codec_context, s_video_stream, s_video_packet);
+}
+
+#endif
 
 bool GSCapture::SendFrame(const PendingFrame& pf)
 {
@@ -1429,6 +1789,13 @@ bool GSCapture::InternalEndCapture(std::unique_lock<std::mutex>& lock)
 	if (s_video_codec_context)
 		wrap_avcodec_free_context(&s_video_codec_context);
 	s_video_stream = nullptr;
+#ifdef _WIN32
+	if (s_gpu_frames)
+	{
+		ReleaseGpuFrameTextures();
+		s_gpu_frames.reset();
+	}
+#endif
 
 	if (s_swr_context)
 		wrap_swr_free(&s_swr_context);
@@ -1596,6 +1963,11 @@ void GSCapture::PrepareForGSReopen()
 	// Replay across automatic renderer switches still needs proper runtime testing.
 	for (PendingFrame& frame : s_pending_frames)
 		frame.tex.reset();
+#ifdef _WIN32
+	// So are the GPU frames' shared textures; the next frame shares new ones with the reopened renderer.
+	if (s_gpu_frames)
+		ReleaseGpuFrameTextures();
+#endif
 }
 
 GSCapture::CodecList GSCapture::GetCodecListForContainer(const char* container, AVMediaType type)

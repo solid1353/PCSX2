@@ -3520,7 +3520,8 @@ bool GSDevice12::CreateCaptureSharedTextures(u32 count, u32 width, u32 height, s
 	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	desc.SampleDesc.Count = 1;
 	desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	// Textures shared with a D3D11 device must allow render target and simultaneous access.
+	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
 	for (u32 i = 0; i < count; i++)
 	{
 		ComPtr<ID3D12Resource> texture;

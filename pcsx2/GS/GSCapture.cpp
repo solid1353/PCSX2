@@ -631,6 +631,38 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		bool has_pixel_format_override = wrap_av_dict_get(s_video_codec_arguments, "pixel_format", nullptr, 0);
 
 		res = wrap_avcodec_open2(s_video_codec_context, vcodec, &s_video_codec_arguments);
+#ifdef _WIN32
+		if (res < 0 && s_gpu_frames)
+		{
+			// The encoder refused GPU frames: reopen it on a fresh context for the readback path.
+			LogAVError(res, "GSCapture: GPU frames unavailable, using readback; avcodec_open2() with GPU frames failed: ");
+			AVCodecContext* const failed = s_video_codec_context;
+			s_video_codec_context = wrap_avcodec_alloc_context3(vcodec);
+			if (s_video_codec_context)
+			{
+				s_video_codec_context->codec_type = AVMEDIA_TYPE_VIDEO;
+				s_video_codec_context->bit_rate = failed->bit_rate;
+				s_video_codec_context->width = failed->width;
+				s_video_codec_context->height = failed->height;
+				s_video_codec_context->sample_aspect_ratio = failed->sample_aspect_ratio;
+				s_video_codec_context->time_base = failed->time_base;
+				s_video_codec_context->flags = failed->flags;
+				s_video_codec_context->pix_fmt = sw_pix_fmt;
+			}
+			AVCodecContext* failed_context = failed;
+			wrap_avcodec_free_context(&failed_context);
+			wrap_av_buffer_unref(&s_video_hw_frames);
+			wrap_av_buffer_unref(&s_video_hw_context);
+			ReleaseGpuFrameTextures();
+			s_gpu_frames.reset();
+			if (s_video_codec_arguments)
+				wrap_av_dict_free(&s_video_codec_arguments);
+			if (GSConfig.EnableVideoCaptureParameters)
+				wrap_av_dict_parse_string(&s_video_codec_arguments, GSConfig.VideoCaptureParameters.c_str(), "=", ":", 0);
+			res = s_video_codec_context ? wrap_avcodec_open2(s_video_codec_context, vcodec, &s_video_codec_arguments) :
+			                              AVERROR(ENOMEM);
+		}
+#endif
 		if (res < 0)
 		{
 			LogAVError(res, "avcodec_open2() for video failed: ");
@@ -1165,26 +1197,43 @@ float4 ps_main(float4 position : SV_Position) : SV_Target
 	if (FAILED(hr))
 		return fail("CreateShader", hr);
 
+	// Share the textures now, so a device that cannot open them falls back to readback before the encoder opens.
+	s_gpu_frames = std::move(gpu);
+	const auto abandon = []() {
+		ReleaseGpuFrameTextures();
+		s_gpu_frames.reset();
+		return false;
+	};
+	if (!ShareGpuFrameTextures())
+	{
+		Console.Warning("GSCapture: GPU frames unavailable, shared textures could not be opened; using readback.");
+		return abandon();
+	}
+
 	// The encoder's frames: BGRA D3D11 textures on that device, allocated as the encoder needs them.
 	AVBufferRef* device_ref = wrap_av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D11VA);
 	if (!device_ref)
-		return fail("av_hwdevice_ctx_alloc", E_OUTOFMEMORY);
+	{
+		fail("av_hwdevice_ctx_alloc", E_OUTOFMEMORY);
+		return abandon();
+	}
 	AVD3D11VADeviceContext* const device_hw =
 		static_cast<AVD3D11VADeviceContext*>(reinterpret_cast<AVHWDeviceContext*>(device_ref->data)->hwctx);
-	device_hw->device = gpu->device.get();
+	device_hw->device = s_gpu_frames->device.get();
 	device_hw->device->AddRef();
 	int res = wrap_av_hwdevice_ctx_init(device_ref);
 	if (res < 0)
 	{
-		LogAVError(res, "av_hwdevice_ctx_init() for GPU frames failed: ");
+		LogAVError(res, "GSCapture: GPU frames unavailable, using readback; av_hwdevice_ctx_init() failed: ");
 		wrap_av_buffer_unref(&device_ref);
-		return false;
+		return abandon();
 	}
 	AVBufferRef* frames_ref = wrap_av_hwframe_ctx_alloc(device_ref);
 	if (!frames_ref)
 	{
 		wrap_av_buffer_unref(&device_ref);
-		return fail("av_hwframe_ctx_alloc", E_OUTOFMEMORY);
+		fail("av_hwframe_ctx_alloc", E_OUTOFMEMORY);
+		return abandon();
 	}
 	AVHWFramesContext* const frames = reinterpret_cast<AVHWFramesContext*>(frames_ref->data);
 	frames->format = AV_PIX_FMT_D3D11;
@@ -1196,17 +1245,16 @@ float4 ps_main(float4 position : SV_Position) : SV_Target
 	res = wrap_av_hwframe_ctx_init(frames_ref);
 	if (res < 0)
 	{
-		LogAVError(res, "av_hwframe_ctx_init() for GPU frames failed: ");
+		LogAVError(res, "GSCapture: GPU frames unavailable, using readback; av_hwframe_ctx_init() failed: ");
 		wrap_av_buffer_unref(&frames_ref);
 		wrap_av_buffer_unref(&device_ref);
-		return false;
+		return abandon();
 	}
 
 	s_video_hw_context = device_ref;
 	s_video_hw_frames = frames_ref;
 	s_video_codec_context->hw_frames_ctx = wrap_av_buffer_ref(s_video_hw_frames);
 	s_video_codec_context->pix_fmt = AV_PIX_FMT_D3D11;
-	s_gpu_frames = std::move(gpu);
 	Console.WriteLnFmt(Color_StrongGreen, "GSCapture: {} takes its frames on the GPU.", vcodec->name);
 	return true;
 }
@@ -1230,24 +1278,35 @@ bool GSCapture::ShareGpuFrameTextures()
 	if (!renderer->CreateCaptureSharedTextures(MAX_PENDING_FRAMES, s_size.x, s_size.y, &textures, &ready_fence, &free_fence))
 		return false;
 
+	// Each step that fails is logged with its result, so a failure names the call.
 	bool okay = true;
+	const auto check = [&okay](const char* what, HRESULT hr) {
+		if (okay && FAILED(hr))
+		{
+			Console.Error("GSCapture: %s for the shared capture textures failed: %08X", what, static_cast<unsigned>(hr));
+			okay = false;
+		}
+	};
 	for (HANDLE handle : textures)
 	{
 		GpuFrames::ComPtr<ID3D11Texture2D> texture;
 		GpuFrames::ComPtr<ID3D11ShaderResourceView> view;
-		okay = okay && SUCCEEDED(gpu.device->OpenSharedResource1(handle, IID_PPV_ARGS(texture.put()))) &&
-			   SUCCEEDED(gpu.device->CreateShaderResourceView(texture.get(), nullptr, view.put()));
+		if (okay)
+			check("OpenSharedResource1", gpu.device->OpenSharedResource1(handle, IID_PPV_ARGS(texture.put())));
+		if (okay)
+			check("CreateShaderResourceView", gpu.device->CreateShaderResourceView(texture.get(), nullptr, view.put()));
 		gpu.views.push_back(std::move(view));
 		CloseHandle(handle);
 	}
-	okay = okay && SUCCEEDED(gpu.device->OpenSharedFence(ready_fence, IID_PPV_ARGS(gpu.ready_fence.put()))) &&
-		   SUCCEEDED(gpu.device->OpenSharedFence(free_fence, IID_PPV_ARGS(gpu.free_fence.put())));
+	if (okay)
+		check("OpenSharedFence (ready)", gpu.device->OpenSharedFence(ready_fence, IID_PPV_ARGS(gpu.ready_fence.put())));
+	if (okay)
+		check("OpenSharedFence (free)", gpu.device->OpenSharedFence(free_fence, IID_PPV_ARGS(gpu.free_fence.put())));
 	CloseHandle(ready_fence);
 	CloseHandle(free_fence);
 	gpu.renderer = renderer;
 	if (!okay)
 	{
-		Console.Error("GSCapture: Failed to open the renderer's shared capture textures.");
 		ReleaseGpuFrameTextures();
 		return false;
 	}

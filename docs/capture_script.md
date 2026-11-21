@@ -21,6 +21,8 @@ script as one argument, including on macOS. Names are lowercase.
 | `sticks <rx> <ry> <lx> <ly>` | Replace pad 0's right X/Y and left X/Y stick bytes for the next interval and following intervals until another `sticks`. Each axis is an integer in 0–255, decimal or hexadecimal. |
 | `capture <path.mkv>` | Arm video and audio capture for the next interval. The parent folder must exist; replace an existing file. Relative paths use the working directory. Spaces in the path are accepted; optional double quotes around the path are removed. |
 | `stop` | Drain and finalize the active capture before executing another statement. |
+| `log <path> <read> ...` | Log the reads after every completed VSync from the next interval on (see [logging memory](#logging-memory)). |
+| `log stop` | Close the open log. |
 
 Buttons are `cross`, `circle`, `square`, `triangle`, `up`, `down`, `left`,
 `right`, `l1`, `l2`, `l3`, `r1`, `r2`, `r3`, `start`, and `select`, joined
@@ -108,6 +110,30 @@ wait for the counter to change before capturing:
 
 ```text
 load "fight start.txt"; wait [0x100] changes within 120; capture take.mkv; run 300; stop
+```
+
+## Logging memory
+
+`log <path> <read> [<read> ...]` creates or replaces the file at `<path>`;
+its parent folder must exist, and relative paths use the working directory.
+Because reads follow it, a path containing spaces must be written in double
+quotes. After every completed VSync from the next interval on, the log gains
+one line: the frame index since the `log` statement, starting at 0, then each
+read's value, separated by tabs and ending in LF. Logging continues through
+`run`, `wait`, and captures, and a script may log without capturing.
+
+Reads are those of [conditions](#conditions), printed in decimal after their
+shift and mask, plus `f[address]`, which prints the 32-bit float with nine
+significant digits so it reads back exactly. `f[]` takes no shift or mask and
+appears only in logs. A read that fails, such as one through a null pointer,
+prints `-` without failing the script.
+
+`log stop` closes the log; a new `log` closes the previous one, and the
+script's end or failure closes it too. A file that cannot be created fails the
+script. For example, a word and a float behind a pointer for 600 frames:
+
+```text
+log "values 60fps.txt" [0x00100000] f[[0x00100004]+0x10]; run 600; log stop
 ```
 
 ## Capture and completion

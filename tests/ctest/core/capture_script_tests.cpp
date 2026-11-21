@@ -620,3 +620,57 @@ TEST_F(CaptureScriptLoadTest, ChangeWaitSnapshotsLoadedValueBeforeTheNextInterva
 	EXPECT_TRUE(runner->IsComplete());
 	EXPECT_EQ(runner->GetFrameCount(), 3);
 }
+
+TEST(CaptureScriptParser, RejectsMalformedLogs)
+{
+	const char* scripts[] = {
+		"log",
+		"log values.txt",
+		"log \"values.txt [0x10]",
+		"log values.txt f[0x10]>>1",
+		"log values.txt 0x10",
+		"wait f[0x10] == 1 within 1",
+		"wait [f[0x10]] == 1 within 1",
+	};
+	for (const char* script : scripts)
+	{
+		std::string error;
+		EXPECT_FALSE(Parse(script, &error)) << script;
+		EXPECT_FALSE(error.empty()) << script;
+	}
+	EXPECT_TRUE(Parse("log stop", nullptr));
+	EXPECT_TRUE(Parse("log values.txt [0x10] f[0x14]; log stop", nullptr));
+}
+
+TEST_F(CaptureScriptLoadTest, LogsEachCompletedFrameFromTheNextInterval)
+{
+	Write(0x10, 5);
+	Write(0x14, 0xfffe);
+	Write(0x30, 0x3fc00000); // 1.5f
+	Write(0x40, 0);
+	auto runner = MakeRunner("run 1; log \"" + m_path + "\" [0x10] sh[0x14] f[0x30] [[0x40]+4]; run 2; log stop; run 1");
+	ASSERT_TRUE(runner);
+	ASSERT_TRUE(runner->Start(m_ram, CAPTURE_OK, STOP_OK));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	Write(0x10, 6);
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	Write(0x10, 7);
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_TRUE(runner->IsComplete());
+	EXPECT_EQ(FileSystem::ReadFileToString(m_path.c_str()), std::optional<std::string>("0\t5\t-2\t1.5\t-\n1\t6\t-2\t1.5\t-\n"));
+}
+
+TEST_F(CaptureScriptLoadTest, NewLogAndScriptEndCloseTheOpenLog)
+{
+	const std::string second = (std::filesystem::path(m_directory) / "second.txt").string();
+	Write(0x10, 3);
+	auto runner = MakeRunner("log \"" + m_path + "\" b[0x10]; run 1; log " + second + " h[0x10]; run 1");
+	ASSERT_TRUE(runner);
+	ASSERT_TRUE(runner->Start(m_ram, CAPTURE_OK, STOP_OK));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	ASSERT_TRUE(runner->EndFrame(m_ram, CAPTURE_OK, STOP_OK));
+	EXPECT_TRUE(runner->IsComplete());
+	EXPECT_EQ(FileSystem::ReadFileToString(m_path.c_str()), std::optional<std::string>("0\t3\n"));
+	EXPECT_EQ(FileSystem::ReadFileToString(second.c_str()), std::optional<std::string>("0\t3\n"));
+}

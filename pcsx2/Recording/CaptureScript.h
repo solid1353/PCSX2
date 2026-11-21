@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/FileSystem.h"
 #include "common/Pcsx2Defs.h"
 
 #include <functional>
@@ -24,7 +25,8 @@ namespace CaptureScript
 			U32,
 			U16,
 			S16,
-			U8
+			U8,
+			F32 // Logs only: the 32-bit float's bits, printed as a float.
 		};
 		struct Transform
 		{
@@ -37,6 +39,8 @@ namespace CaptureScript
 		std::vector<Transform> transforms;
 		std::optional<u64> ResolveAddress(std::span<const u8> ram) const;
 		std::optional<s64> Evaluate(std::span<const u8> ram) const;
+		// The value as a log prints it, or "-" when the read fails.
+		std::string Format(std::span<const u8> ram) const;
 	};
 
 	struct Comparison
@@ -69,7 +73,9 @@ namespace CaptureScript
 			Hold,
 			Sticks,
 			Capture,
-			Stop
+			Stop,
+			Log,
+			LogStop
 		};
 		Type type;
 		u64 frames = 0;
@@ -79,6 +85,7 @@ namespace CaptureScript
 		Condition condition;
 		Read change_read;
 		std::string path;
+		std::vector<Read> log_reads;
 	};
 	using Program = std::vector<Statement>;
 	std::optional<Program> Parse(std::string_view text, std::string* error);
@@ -103,6 +110,11 @@ namespace CaptureScript
 	private:
 		bool Execute(std::span<u8> ram, const CaptureAction& capture, const StopAction& stop);
 		bool Fail(std::string_view reason);
+		void WriteLogLine(std::span<const u8> ram);
+		// The open log, its reads, and the frames it has logged.
+		FileSystem::ManagedCFilePtr m_log;
+		const std::vector<Read>* m_log_reads = nullptr;
+		u64 m_log_frame = 0;
 		Program m_program;
 		size_t m_statement = 0;
 		u64 m_frame = 0;

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cctype>
+#include <cstring>
 #include <limits>
 
 namespace CaptureScript
@@ -36,7 +37,7 @@ namespace CaptureScript
 		if (!resolved)
 			return std::nullopt;
 		const u64 address = *resolved;
-		const size_t size = type == Type::U32 ? 4 : (type == Type::U8 ? 1 : 2);
+		const size_t size = (type == Type::U32 || type == Type::F32) ? 4 : (type == Type::U8 ? 1 : 2);
 		if (address > ram.size() || size > ram.size() - address)
 			return std::nullopt;
 		u32 bits = 0;
@@ -46,6 +47,22 @@ namespace CaptureScript
 		for (const Transform& transform : transforms)
 			value = transform.shift ? (value >> transform.operand) : (value & transform.operand);
 		return value;
+	}
+
+	std::string Read::Format(const std::span<const u8> ram) const
+	{
+		const auto value = Evaluate(ram);
+		if (!value)
+			return "-";
+		if (type == Type::F32)
+		{
+			// Nine significant digits read back to the same float.
+			const u32 bits = static_cast<u32>(*value);
+			float number;
+			std::memcpy(&number, &bits, sizeof(number));
+			return fmt::format("{:.9g}", number);
+		}
+		return fmt::format("{}", *value);
 	}
 
 	bool Comparison::Evaluate(const std::span<const u8> ram) const
@@ -205,9 +222,14 @@ namespace CaptureScript
 							return Error("stop requires an active capture");
 						capturing = false;
 					}
+					else if (command == "log")
+					{
+						if (!ParseLog(statement))
+							return std::nullopt;
+					}
 					else
 					{
-						return Error("expected wait, load, run, hold, sticks, capture, or stop");
+						return Error("expected wait, load, run, hold, sticks, capture, stop, or log");
 					}
 					result.push_back(std::move(statement));
 					if (!AtEnd() && !Take(";"))
@@ -259,6 +281,64 @@ namespace CaptureScript
 				m_error = reason;
 				return std::nullopt;
 			}
+			bool AtStatementEnd()
+			{
+				return AtEnd() || m_text[m_pos] == ';';
+			}
+			// log stop | log <path> <read> [<read> ...]; a path containing spaces is written in double quotes.
+			bool ParseLog(Statement& statement)
+			{
+				const size_t before_word = m_pos;
+				if (Word() == "stop" && AtStatementEnd())
+				{
+					statement.type = Statement::Type::LogStop;
+					return true;
+				}
+				m_pos = before_word;
+				statement.type = Statement::Type::Log;
+				SkipSpace();
+				std::string_view path;
+				if (m_pos < m_text.size() && m_text[m_pos] == '"')
+				{
+					const size_t close = m_text.find('"', m_pos + 1);
+					if (close == std::string_view::npos)
+					{
+						Error("log path is missing its closing quote");
+						return false;
+					}
+					path = m_text.substr(m_pos + 1, close - m_pos - 1);
+					m_pos = close + 1;
+				}
+				else
+				{
+					const size_t begin = m_pos;
+					while (m_pos < m_text.size() && m_text[m_pos] != ';' &&
+						   !std::isspace(static_cast<unsigned char>(m_text[m_pos])))
+					{
+						m_pos++;
+					}
+					path = m_text.substr(begin, m_pos - begin);
+				}
+				if (path.empty() || path.find('\0') != std::string_view::npos)
+				{
+					Error("expected a non-empty log path");
+					return false;
+				}
+				statement.path = path;
+				while (!AtStatementEnd())
+				{
+					Read read;
+					if (!ParseRead(read, 0, true))
+						return false;
+					statement.log_reads.push_back(std::move(read));
+				}
+				if (statement.log_reads.empty())
+				{
+					Error("log needs at least one read after its path");
+					return false;
+				}
+				return true;
+			}
 			void SkipSpace()
 			{
 				while (m_pos < m_text.size() && std::isspace(static_cast<unsigned char>(m_text[m_pos])))
@@ -308,7 +388,7 @@ namespace CaptureScript
 				value = negative ? -static_cast<s64>(number) : static_cast<s64>(number);
 				return true;
 			}
-			bool ParseRead(Read& read, unsigned depth)
+			bool ParseRead(Read& read, unsigned depth, bool allow_float = false)
 			{
 				if (depth >= 64)
 				{
@@ -321,6 +401,15 @@ namespace CaptureScript
 					read.type = Read::Type::U16;
 				else if (Take("b"))
 					read.type = Read::Type::U8;
+				else if (Take("f"))
+				{
+					if (!allow_float)
+					{
+						Error("f[] reads are only for log values");
+						return false;
+					}
+					read.type = Read::Type::F32;
+				}
 				if (!Take("["))
 				{
 					Error("expected a memory read");
@@ -350,6 +439,11 @@ namespace CaptureScript
 					u64 operand;
 					if (!Number(operand))
 						return false;
+					if (read.type == Read::Type::F32)
+					{
+						Error("f[] reads take no shift or mask");
+						return false;
+					}
 					if ((shift && (shifted || operand > 31)) || (!shift && (masked || operand > std::numeric_limits<u32>::max())))
 					{
 						Error("invalid or repeated shift/mask");
@@ -363,7 +457,8 @@ namespace CaptureScript
 			bool ParseAddress(Read& read, unsigned depth)
 			{
 				SkipSpace();
-				if (m_pos < m_text.size() && (m_text[m_pos] == '[' || m_text[m_pos] == 'h' || m_text[m_pos] == 's' || m_text[m_pos] == 'b'))
+				if (m_pos < m_text.size() && (m_text[m_pos] == '[' || m_text[m_pos] == 'h' || m_text[m_pos] == 's' ||
+												 m_text[m_pos] == 'b' || m_text[m_pos] == 'f'))
 				{
 					read.pointer = std::make_unique<Read>();
 					if (!ParseRead(*read.pointer, depth + 1))
@@ -485,6 +580,8 @@ namespace CaptureScript
 	bool Runner::Fail(std::string_view reason)
 	{
 		m_error = fmt::format("statement {}, frame {}: {}", m_statement + 1, m_frame, reason);
+		m_log.reset();
+		m_log_reads = nullptr;
 		return false;
 	}
 
@@ -527,10 +624,40 @@ namespace CaptureScript
 						return Fail("could not finalize capture");
 					m_capturing = false;
 					break;
+				case Statement::Type::Log:
+				{
+					// A new log closes the previous one; its first line comes at the end of the next interval.
+					m_log.reset();
+					m_log = FileSystem::OpenManagedCFile(statement.path.c_str(), "wb");
+					if (!m_log)
+						return Fail(fmt::format("could not open log file '{}'", statement.path));
+					m_log_reads = &statement.log_reads;
+					m_log_frame = 0;
+					break;
+				}
+				case Statement::Type::LogStop:
+					m_log.reset();
+					m_log_reads = nullptr;
+					break;
 			}
 			m_statement++;
 		}
+		// The script's end closes its log.
+		m_log.reset();
+		m_log_reads = nullptr;
 		return true;
+	}
+
+	void Runner::WriteLogLine(std::span<const u8> ram)
+	{
+		std::string line = fmt::format("{}", m_log_frame++);
+		for (const Read& read : *m_log_reads)
+		{
+			line += '\t';
+			line += read.Format(ram);
+		}
+		line += '\n';
+		std::fwrite(line.data(), 1, line.size(), m_log.get());
 	}
 
 	bool Runner::Start(std::span<u8> ram, const CaptureAction& capture, const StopAction& stop)
@@ -546,6 +673,8 @@ namespace CaptureScript
 			return true;
 		m_frame++;
 		m_elapsed++;
+		if (m_log)
+			WriteLogLine(ram);
 		const Statement& statement = m_program[m_statement];
 		if (statement.type == Statement::Type::Wait)
 		{
